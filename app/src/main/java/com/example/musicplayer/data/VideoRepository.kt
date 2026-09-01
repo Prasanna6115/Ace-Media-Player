@@ -4,12 +4,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
 
-/**
- * Scans videos indexed by MediaStore.
- *
- * Only discovery is implemented here. Playback is intentionally left to a
- * later phase so the existing audio playback path remains untouched.
- */
+/** Scans videos indexed by MediaStore. */
 class VideoRepository(private val context: Context) {
 
     fun scanAllVideos(): List<Video> {
@@ -28,7 +23,7 @@ class VideoRepository(private val context: Context) {
         )
 
         val selection = "${MediaStore.Video.Media.DURATION} > 0"
-        val sortOrder = "${MediaStore.Video.Media.TITLE} ASC"
+        val sortOrder = "${MediaStore.Video.Media.TITLE} COLLATE NOCASE ASC"
 
         context.contentResolver.query(
             collection,
@@ -37,7 +32,6 @@ class VideoRepository(private val context: Context) {
             null,
             sortOrder
         )?.use { cursor ->
-
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.TITLE)
             val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
@@ -49,18 +43,21 @@ class VideoRepository(private val context: Context) {
 
             while (cursor.moveToNext()) {
                 val id = cursor.getLong(idCol)
+                val path = cursor.getString(dataCol).orEmpty()
+                val folder = path.substringBeforeLast('/', "Unknown").substringAfterLast('/').ifBlank { "Unknown" }
                 val contentUri = ContentUris.withAppendedId(collection, id)
 
                 videos += Video(
                     id = id,
-                    title = cursor.getString(titleCol) ?: "Unknown Video",
+                    title = cursor.getString(titleCol).orEmpty().ifBlank { "Unknown Video" },
                     duration = cursor.getLong(durationCol),
-                    path = cursor.getString(dataCol) ?: "",
+                    path = path,
                     uriString = contentUri.toString(),
-                    mimeType = cursor.getString(mimeCol) ?: "",
+                    mimeType = cursor.getString(mimeCol).orEmpty(),
                     width = cursor.getInt(widthCol),
                     height = cursor.getInt(heightCol),
-                    size = cursor.getLong(sizeCol)
+                    size = cursor.getLong(sizeCol),
+                    folderName = folder
                 )
             }
         }

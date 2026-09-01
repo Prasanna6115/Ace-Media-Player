@@ -20,7 +20,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -30,241 +29,128 @@ import com.example.musicplayer.ui.screens.*
 import com.example.musicplayer.viewmodel.MusicViewModel
 
 sealed class Screen(val route: String, val label: String) {
-
     data object Library : Screen("library", "Library")
-
     data object Search : Screen("search", "Search")
-
     data object Playlists : Screen("playlists", "Playlists")
-
     data object Folders : Screen("folders", "Folders")
-
     data object Favorites : Screen("favorites", "Favorites")
-
     data object NowPlaying : Screen("now_playing", "Now Playing")
-
     data object Equalizer : Screen("equalizer", "Equalizer")
-
     data object Settings : Screen("settings", "Settings")
+    data object VideoPlayer : Screen("video_player/{videoId}", "Video Player") {
+        fun createRoute(videoId: Long) = "video_player/$videoId"
+    }
 }
 
-private val bottomTabs = listOf(
-    Screen.Library,
-    Screen.Search,
-    Screen.Playlists,
-    Screen.Folders
-)
+private val bottomTabs = listOf(Screen.Library, Screen.Search, Screen.Playlists, Screen.Folders)
 
 @Composable
 fun MusicNavGraph(viewModel: MusicViewModel) {
-
     val navController = rememberNavController()
-
     val playbackState by viewModel.playbackState.collectAsState()
-
-    val backStackEntry by navController
-        .currentBackStackEntryAsState()
-
-    val currentRoute = backStackEntry?.destination
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = backStackEntry?.destination
+    val isNowPlaying = currentDestination?.hierarchy?.any { it.route == Screen.NowPlaying.route } == true
+    val isVideoPlayer = currentDestination?.route?.startsWith("video_player/") == true
 
     Scaffold(
         bottomBar = {
-
             Column {
-
-                // Mini Player
-                // Hidden on Now Playing screen
-                if (
-                    playbackState.currentSong != null &&
-                    currentRoute?.hierarchy?.any {
-                        it.route == Screen.NowPlaying.route
-                    } != true
-                ) {
-
+                // The audio MiniPlayer is deliberately not shown over full Now Playing
+                // or the video player. It stays available on the normal library screens.
+                if (playbackState.currentSong != null && !isNowPlaying && !isVideoPlayer) {
                     MiniPlayer(
                         viewModel = viewModel,
-                        onExpand = {
-                            navController.navigate(
-                                Screen.NowPlaying.route
-                            )
-                        }
+                        onExpand = { navController.navigate(Screen.NowPlaying.route) }
                     )
                 }
 
-                // Bottom Navigation Bar
                 NavigationBar {
-
                     bottomTabs.forEach { screen ->
-
                         NavigationBarItem(
-
-                            selected =
-                                currentRoute?.hierarchy?.any {
-                                    it.route == screen.route
-                                } == true,
-
+                            selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
-
-                                navController.navigate(
-                                    screen.route
-                                ) {
-
-                                    popUpTo(
-                                        navController.graph
-                                            .findStartDestination()
-                                            .id
-                                    ) {
-                                        saveState = true
-                                    }
-
+                                // Library is the real root. From ANY screen, including
+                                // video/equalizer/settings, this returns to Home cleanly.
+                                navController.navigate(screen.route) {
+                                    popUpTo(Screen.Library.route) { saveState = true }
                                     launchSingleTop = true
-
                                     restoreState = true
                                 }
                             },
-
-                            icon = {
-                                Icon(
-                                    imageVector = iconFor(screen),
-                                    contentDescription = screen.label
-                                )
-                            },
-
-                            label = {
-                                Text(screen.label)
-                            }
+                            icon = { Icon(iconFor(screen), contentDescription = screen.label) },
+                            label = { Text(screen.label) }
                         )
                     }
                 }
             }
         }
     ) { padding ->
-
         NavHost(
             navController = navController,
-
             startDestination = Screen.Library.route,
-
             modifier = Modifier.padding(padding)
         ) {
-
-            // Home: Audio / Video tabs
             composable(Screen.Library.route) {
                 HomeScreen(
                     viewModel = viewModel,
-                    onOpenEqualizer = {
-                        navController.navigate(Screen.Equalizer.route)
-                    },
-                    onOpenSettings = {
-                        navController.navigate(Screen.Settings.route)
-                    },
-                    onOpenFavorites = {
-                        navController.navigate(Screen.Favorites.route)
-                    },
-                    onOpenVideo = {
-                        // Video playback is added in the next phase.
-                    }
+                    onOpenEqualizer = { navController.navigate(Screen.Equalizer.route) },
+                    onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                    onOpenFavorites = { navController.navigate(Screen.Favorites.route) },
+                    onOpenVideo = { id -> navController.navigate(Screen.VideoPlayer.createRoute(id)) }
                 )
             }
 
-            // Search
-            composable(Screen.Search.route) {
-
-                SearchScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Playlists
-            composable(Screen.Playlists.route) {
-
-                PlaylistScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Folders
+            composable(Screen.Search.route) { SearchScreen(viewModel) }
+            composable(Screen.Playlists.route) { PlaylistScreen(viewModel) }
             composable(Screen.Folders.route) {
-
                 FolderBrowserScreen(
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onOpenVideo = { id -> navController.navigate(Screen.VideoPlayer.createRoute(id)) }
                 )
             }
+            composable(Screen.Favorites.route) { FavoritesScreen(viewModel) }
 
-            // Favorites
-            composable(Screen.Favorites.route) {
-
-                FavoritesScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Now Playing
             composable(Screen.NowPlaying.route) {
-
                 NowPlayingScreen(
                     viewModel = viewModel,
-
-                    onBack = {
-                        navController.popBackStack()
-                    },
-
-                    onOpenEqualizer = {
-                        navController.navigate(
-                            Screen.Equalizer.route
-                        )
-                    }
+                    onBack = { navController.popBackStack() },
+                    onOpenEqualizer = { navController.navigate(Screen.Equalizer.route) }
                 )
             }
 
-            // Equalizer
             composable(Screen.Equalizer.route) {
-
-                EqualizerScreen(
-                    onBack = {
-                        navController.popBackStack()
-                    }
-                )
+                EqualizerScreen(onBack = { navController.popBackStack() })
             }
 
-            // Settings
             composable(Screen.Settings.route) {
+                SettingsScreen(viewModel, onBack = { navController.popBackStack() })
+            }
 
-                SettingsScreen(
-                    viewModel = viewModel,
-
-                    onBack = {
-                        navController.popBackStack()
-                    }
-                )
+            composable(Screen.VideoPlayer.route) { entry ->
+                val videoId = entry.arguments?.getString("videoId")?.toLongOrNull()
+                if (videoId == null) {
+                    navController.popBackStack()
+                } else {
+                    VideoPlayerScreen(
+                        viewModel = viewModel,
+                        videoId = videoId,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
             }
         }
     }
 }
 
 private fun iconFor(screen: Screen) = when (screen) {
-
-    Screen.Library ->
-        Icons.Filled.LibraryMusic
-
-    Screen.Search ->
-        Icons.Filled.Search
-
-    Screen.Playlists ->
-        Icons.Filled.PlaylistPlay
-
-    Screen.Folders ->
-        Icons.Filled.Folder
-
-    Screen.Favorites ->
-        Icons.Filled.Favorite
-
-    Screen.Equalizer ->
-        Icons.Filled.Equalizer
-
-    Screen.Settings ->
-        Icons.Filled.Settings
-
-    Screen.NowPlaying ->
-        Icons.Filled.LibraryMusic
+    Screen.Library -> Icons.Filled.LibraryMusic
+    Screen.Search -> Icons.Filled.Search
+    Screen.Playlists -> Icons.Filled.PlaylistPlay
+    Screen.Folders -> Icons.Filled.Folder
+    Screen.Favorites -> Icons.Filled.Favorite
+    Screen.Equalizer -> Icons.Filled.Equalizer
+    Screen.Settings -> Icons.Filled.Settings
+    Screen.NowPlaying -> Icons.Filled.LibraryMusic
+    Screen.VideoPlayer -> Icons.Filled.LibraryMusic
 }

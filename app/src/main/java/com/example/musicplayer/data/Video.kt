@@ -1,11 +1,6 @@
 package com.example.musicplayer.data
 
-/**
- * Represents a video item discovered through Android MediaStore.
- *
- * The content URI is used for playback. The file path is retained for
- * compatibility with devices/apps that expose a real filesystem path.
- */
+/** A video item discovered from Android MediaStore. */
 data class Video(
     val id: Long,
     val title: String,
@@ -15,5 +10,6 @@ data class Video(
     val mimeType: String,
     val width: Int,
     val height: Int,
-    val size: Long
+    val size: Long,
+    val folderName: String
 )

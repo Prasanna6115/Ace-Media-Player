@@ -85,6 +85,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Playback ----
     fun playSongs(songs: List<Song>, startIndex: Int) = musicController.playQueue(songs, startIndex)
+    fun playVideo(video: Video) = musicController.playVideo(video)
+    fun stopPlayback() = musicController.stop()
     fun playPause() = musicController.playPause()
     fun next() = musicController.next()
     fun previous() = musicController.previous()
