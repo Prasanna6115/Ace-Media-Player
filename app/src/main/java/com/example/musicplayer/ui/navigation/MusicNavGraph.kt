@@ -148,28 +148,21 @@ fun MusicNavGraph(viewModel: MusicViewModel) {
             modifier = Modifier.padding(padding)
         ) {
 
-            // Library
+            // Home: Audio / Video tabs
             composable(Screen.Library.route) {
-
-                LibraryScreen(
+                HomeScreen(
                     viewModel = viewModel,
-
                     onOpenEqualizer = {
-                        navController.navigate(
-                            Screen.Equalizer.route
-                        )
+                        navController.navigate(Screen.Equalizer.route)
                     },
-
                     onOpenSettings = {
-                        navController.navigate(
-                            Screen.Settings.route
-                        )
+                        navController.navigate(Screen.Settings.route)
                     },
-
                     onOpenFavorites = {
-                        navController.navigate(
-                            Screen.Favorites.route
-                        )
+                        navController.navigate(Screen.Favorites.route)
+                    },
+                    onOpenVideo = {
+                        // Video playback is added in the next phase.
                     }
                 )
             }
