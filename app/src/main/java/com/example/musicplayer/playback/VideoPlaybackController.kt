@@ -39,7 +39,11 @@ class VideoPlaybackController(private val context: Context) {
             controller = runCatching { future.get() }.getOrNull()
             controller?.addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    updateState(isPlaying = isPlaying)
+                    _state.value = _state.value.copy(
+                        isPlaying = isPlaying,
+                        positionMs = controller?.currentPosition?.coerceAtLeast(0L) ?: _state.value.positionMs,
+                        durationMs = controller?.duration?.coerceAtLeast(0L) ?: _state.value.durationMs
+                    )
                 }
 
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
