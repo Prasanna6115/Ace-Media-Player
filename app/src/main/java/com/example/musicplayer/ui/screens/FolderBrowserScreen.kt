@@ -50,6 +50,7 @@ private sealed interface FolderMedia {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FolderBrowserScreen(
     viewModel: MusicViewModel,
