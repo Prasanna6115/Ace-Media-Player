@@ -3,6 +3,7 @@ package com.example.musicplayer.ui.screens
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,10 @@ import androidx.compose.ui.unit.dp
 import com.example.musicplayer.viewmodel.MusicViewModel
 import kotlinx.coroutines.flow.distinctUntilChanged
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    ExperimentalFoundationApi::class
+)
 @Composable
 fun HomeScreen(
     viewModel: MusicViewModel,
