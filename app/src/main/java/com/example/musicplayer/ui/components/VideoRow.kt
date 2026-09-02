@@ -35,6 +35,8 @@ fun VideoRow(
     ) {
         VideoThumbnail(
             uriString = video.uriString,
+            durationMs = video.duration,
+            seed = video.id,
             modifier = Modifier
                 .size(width = 112.dp, height = 68.dp)
                 .clip(RoundedCornerShape(8.dp))

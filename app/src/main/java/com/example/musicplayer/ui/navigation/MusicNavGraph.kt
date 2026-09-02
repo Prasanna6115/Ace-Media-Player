@@ -25,28 +25,24 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.example.musicplayer.ui.components.MiniPlayer
 import com.example.musicplayer.ui.screens.*
 import com.example.musicplayer.viewmodel.MusicViewModel
 
 sealed class Screen(val route: String, val label: String) {
-
     data object Library : Screen("library", "Library")
-
     data object Search : Screen("search", "Search")
-
     data object Playlists : Screen("playlists", "Playlists")
-
     data object Folders : Screen("folders", "Folders")
-
     data object Favorites : Screen("favorites", "Favorites")
-
     data object NowPlaying : Screen("now_playing", "Now Playing")
-
     data object Equalizer : Screen("equalizer", "Equalizer")
-
     data object Settings : Screen("settings", "Settings")
     data object VideoPlayer : Screen("video_player/{videoId}", "Video Player")
+
+    fun videoRoute(videoId: Long): String = "video_player/$videoId"
 }
 
 private val bottomTabs = listOf(
@@ -58,202 +54,106 @@ private val bottomTabs = listOf(
 
 @Composable
 fun MusicNavGraph(viewModel: MusicViewModel) {
-
     val navController = rememberNavController()
-
     val playbackState by viewModel.playbackState.collectAsState()
-
-    val backStackEntry by navController
-        .currentBackStackEntryAsState()
-
-    val currentRoute = backStackEntry?.destination
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val destination = backStackEntry?.destination
+    val isVideoPlayer = destination?.route?.startsWith("video_player/") == true
 
     Scaffold(
         bottomBar = {
+            if (!isVideoPlayer) {
+                Column {
+                    if (
+                        playbackState.currentSong != null &&
+                        destination?.hierarchy?.any { it.route == Screen.NowPlaying.route } != true
+                    ) {
+                        MiniPlayer(
+                            viewModel = viewModel,
+                            onExpand = { navController.navigate(Screen.NowPlaying.route) }
+                        )
+                    }
 
-            Column {
-
-                // Mini Player
-                // Hidden on Now Playing screen
-                if (
-                    playbackState.currentSong != null &&
-                    currentRoute?.hierarchy?.any {
-                        it.route == Screen.NowPlaying.route ||
-                        it.route == "video_player/{videoId}"
-                    } != true
-                ) {
-
-                    MiniPlayer(
-                        viewModel = viewModel,
-                        onExpand = {
-                            navController.navigate(
-                                Screen.NowPlaying.route
+                    NavigationBar {
+                        bottomTabs.forEach { screen ->
+                            NavigationBarItem(
+                                selected = destination?.hierarchy?.any { it.route == screen.route } == true,
+                                onClick = {
+                                    if (screen == Screen.Library) {
+                                        navController.popBackStack(Screen.Library.route, false)
+                                    } else {
+                                        navController.navigate(screen.route) {
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = true
+                                        }
+                                    }
+                                },
+                                icon = {
+                                    Icon(iconFor(screen), contentDescription = screen.label)
+                                },
+                                label = { Text(screen.label) }
                             )
                         }
-                    )
-                }
-
-                // Bottom Navigation Bar
-                NavigationBar {
-
-                    bottomTabs.forEach { screen ->
-
-                        NavigationBarItem(
-
-                            selected =
-                                currentRoute?.hierarchy?.any {
-                                    it.route == screen.route
-                                } == true,
-
-                            onClick = {
-
-                                navController.navigate(
-                                    screen.route
-                                ) {
-                                    if (screen == Screen.Library) {
-                                        popUpTo(Screen.Library.route) {
-                                            inclusive = false
-                                        }
-                                        launchSingleTop = true
-                                    } else {
-                                        popUpTo(
-                                            navController.graph
-                                                .findStartDestination()
-                                                .id
-                                        ) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-
-                            icon = {
-                                Icon(
-                                    imageVector = iconFor(screen),
-                                    contentDescription = screen.label
-                                )
-                            },
-
-                            label = {
-                                Text(screen.label)
-                            }
-                        )
                     }
                 }
             }
         }
     ) { padding ->
+        val hostModifier = if (isVideoPlayer) Modifier else Modifier.padding(padding)
 
         NavHost(
             navController = navController,
-
             startDestination = Screen.Library.route,
-
-            modifier = Modifier.padding(padding)
+            modifier = hostModifier
         ) {
-
-            // Home: Audio / Video tabs
             composable(Screen.Library.route) {
                 HomeScreen(
                     viewModel = viewModel,
-                    onOpenEqualizer = {
-                        navController.navigate(Screen.Equalizer.route)
-                    },
-                    onOpenSettings = {
-                        navController.navigate(Screen.Settings.route)
-                    },
-                    onOpenFavorites = {
-                        navController.navigate(Screen.Favorites.route)
-                    },
-                    onOpenVideo = { videoId ->
-                        navController.navigate("video_player/$videoId")
-                    }
+                    onOpenEqualizer = { navController.navigate(Screen.Equalizer.route) },
+                    onOpenSettings = { navController.navigate(Screen.Settings.route) },
+                    onOpenFavorites = { navController.navigate(Screen.Favorites.route) },
+                    onOpenVideo = { videoId -> navController.navigate(Screen.VideoPlayer.videoRoute(videoId)) }
                 )
             }
 
-            // Video Player
-            composable("video_player/{videoId}") { backStackEntry ->
-                val videoId = backStackEntry.arguments?.getString("videoId")?.toLongOrNull()
-                if (videoId != null) {
-                    VideoPlayerScreen(
-                        viewModel = viewModel,
-                        videoId = videoId,
-                        onBack = { navController.popBackStack() }
-                    )
-                }
-            }
-
-            // Search
-            composable(Screen.Search.route) {
-
-                SearchScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Playlists
-            composable(Screen.Playlists.route) {
-
-                PlaylistScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Folders
+            composable(Screen.Search.route) { SearchScreen(viewModel = viewModel) }
+            composable(Screen.Playlists.route) { PlaylistScreen(viewModel = viewModel) }
             composable(Screen.Folders.route) {
-
                 FolderBrowserScreen(
-                    viewModel = viewModel
+                    viewModel = viewModel,
+                    onOpenVideo = { videoId -> navController.navigate(Screen.VideoPlayer.videoRoute(videoId)) }
                 )
             }
+            composable(Screen.Favorites.route) { FavoritesScreen(viewModel = viewModel) }
 
-            // Favorites
-            composable(Screen.Favorites.route) {
-
-                FavoritesScreen(
-                    viewModel = viewModel
-                )
-            }
-
-            // Now Playing
             composable(Screen.NowPlaying.route) {
-
                 NowPlayingScreen(
                     viewModel = viewModel,
-
-                    onBack = {
-                        navController.popBackStack()
-                    },
-
-                    onOpenEqualizer = {
-                        navController.navigate(
-                            Screen.Equalizer.route
-                        )
-                    }
+                    onBack = { navController.popBackStack() },
+                    onOpenEqualizer = { navController.navigate(Screen.Equalizer.route) }
                 )
             }
 
-            // Equalizer
             composable(Screen.Equalizer.route) {
-
-                EqualizerScreen(
-                    onBack = {
-                        navController.popBackStack()
-                    }
-                )
+                EqualizerScreen(onBack = { navController.popBackStack() })
             }
 
-            // Settings
             composable(Screen.Settings.route) {
+                SettingsScreen(viewModel = viewModel, onBack = { navController.popBackStack() })
+            }
 
-                SettingsScreen(
+            composable(
+                route = Screen.VideoPlayer.route,
+                arguments = listOf(navArgument("videoId") { type = NavType.LongType })
+            ) { entry ->
+                val videoId = entry.arguments?.getLong("videoId") ?: return@composable
+                VideoPlayerScreen(
                     viewModel = viewModel,
-
-                    onBack = {
-                        navController.popBackStack()
-                    }
+                    videoId = videoId,
+                    onBack = { navController.popBackStack() }
                 )
             }
         }
@@ -261,31 +161,13 @@ fun MusicNavGraph(viewModel: MusicViewModel) {
 }
 
 private fun iconFor(screen: Screen) = when (screen) {
-
-    Screen.Library ->
-        Icons.Filled.LibraryMusic
-
-    Screen.Search ->
-        Icons.Filled.Search
-
-    Screen.Playlists ->
-        Icons.Filled.PlaylistPlay
-
-    Screen.Folders ->
-        Icons.Filled.Folder
-
-    Screen.Favorites ->
-        Icons.Filled.Favorite
-
-    Screen.Equalizer ->
-        Icons.Filled.Equalizer
-
-    Screen.Settings ->
-        Icons.Filled.Settings
-
-    Screen.NowPlaying ->
-        Icons.Filled.LibraryMusic
-
-    Screen.VideoPlayer ->
-        Icons.Filled.LibraryMusic
+    Screen.Library -> Icons.Filled.LibraryMusic
+    Screen.Search -> Icons.Filled.Search
+    Screen.Playlists -> Icons.Filled.PlaylistPlay
+    Screen.Folders -> Icons.Filled.Folder
+    Screen.Favorites -> Icons.Filled.Favorite
+    Screen.Equalizer -> Icons.Filled.Equalizer
+    Screen.Settings -> Icons.Filled.Settings
+    Screen.NowPlaying -> Icons.Filled.LibraryMusic
+    Screen.VideoPlayer -> Icons.Filled.LibraryMusic
 }

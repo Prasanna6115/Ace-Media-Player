@@ -14,6 +14,7 @@ import com.example.musicplayer.playback.MusicController
 import com.example.musicplayer.playback.PlaybackUiState
 import com.example.musicplayer.playback.VideoPlaybackController
 import com.example.musicplayer.playback.VideoPlaybackUiState
+import com.example.musicplayer.playback.VideoQuality
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     val playbackState: StateFlow<PlaybackUiState> = musicController.state
     val videoPlaybackState: StateFlow<VideoPlaybackUiState> = videoController.state
+
+    private val preferences = app.getSharedPreferences("ace_settings", android.content.Context.MODE_PRIVATE)
+    private val _darkTheme = MutableStateFlow(preferences.getBoolean("dark_theme", true))
+    val darkTheme: StateFlow<Boolean> = _darkTheme.asStateFlow()
 
     init {
         musicController.connect { /* controller ready */ }
@@ -110,6 +115,12 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
     fun pollVideoPosition() = videoController.pollPosition()
     fun videoPlayer() = videoController.player()
+    fun setVideoQuality(quality: VideoQuality) = videoController.setVideoQuality(quality)
+
+    fun setDarkTheme(enabled: Boolean) {
+        _darkTheme.value = enabled
+        preferences.edit().putBoolean("dark_theme", enabled).apply()
+    }
 
     // ---- Favorites ----
     fun toggleFavorite(songId: Long) {

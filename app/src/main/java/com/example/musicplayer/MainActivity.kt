@@ -7,6 +7,12 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import com.example.musicplayer.playback.PlaybackService
@@ -56,7 +62,17 @@ class MainActivity : ComponentActivity() {
         requestNeededPermissions()
 
         setContent {
-            MusicPlayerTheme {
+            val darkTheme by viewModel.darkTheme.collectAsState()
+            MusicPlayerTheme(darkTheme = darkTheme) {
+                SideEffect {
+                    val barColor = if (darkTheme) Color(0xFF080A0F) else Color(0xFFF8F8FA)
+                    window.statusBarColor = barColor.toArgb()
+                    window.navigationBarColor = barColor.toArgb()
+                    WindowInsetsControllerCompat(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !darkTheme
+                        isAppearanceLightNavigationBars = !darkTheme
+                    }
+                }
                 MusicNavGraph(viewModel = viewModel)
             }
         }
