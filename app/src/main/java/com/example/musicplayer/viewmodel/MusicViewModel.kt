@@ -12,6 +12,8 @@ import com.example.musicplayer.data.PlaylistSongCrossRef
 import com.example.musicplayer.data.Song
 import com.example.musicplayer.playback.MusicController
 import com.example.musicplayer.playback.PlaybackUiState
+import com.example.musicplayer.playback.VideoPlaybackController
+import com.example.musicplayer.playback.VideoPlaybackUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +28,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.getInstance(app)
     private val dao = db.musicDao()
     val musicController = MusicController(app)
+    val videoController = VideoPlaybackController(app)
 
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
     val allSongs: StateFlow<List<Song>> = _allSongs.asStateFlow()
@@ -45,9 +48,11 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val playbackState: StateFlow<PlaybackUiState> = musicController.state
+    val videoPlaybackState: StateFlow<VideoPlaybackUiState> = videoController.state
 
     init {
         musicController.connect { /* controller ready */ }
+        videoController.connect()
     }
 
     fun scanLibrary() {
@@ -85,8 +90,6 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Playback ----
     fun playSongs(songs: List<Song>, startIndex: Int) = musicController.playQueue(songs, startIndex)
-    fun playVideo(video: Video) = musicController.playVideo(video)
-    fun stopPlayback() = musicController.stop()
     fun playPause() = musicController.playPause()
     fun next() = musicController.next()
     fun previous() = musicController.previous()
@@ -95,6 +98,18 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun cycleRepeatMode() = musicController.cycleRepeatMode()
     fun setVolume(volume: Float) = musicController.setVolume(volume)
     fun pollPosition() = musicController.pollPosition()
+
+    // ---- Video Playback ----
+    fun playVideo(video: Video) = videoController.playVideo(video, allVideos.value)
+    fun videoPlayPause() = videoController.playPause()
+    fun videoNext() = videoController.next()
+    fun videoPrevious() = videoController.previous()
+    fun videoSeekTo(positionMs: Long) = videoController.seekTo(positionMs)
+    fun videoToggleShuffle() = videoController.toggleShuffle()
+    fun videoCycleRepeatMode() = videoController.cycleRepeatMode()
+    fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
+    fun pollVideoPosition() = videoController.pollPosition()
+    fun videoPlayer() = videoController.player()
 
     // ---- Favorites ----
     fun toggleFavorite(songId: Long) {
@@ -127,6 +142,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun songIdsForPlaylist(playlistId: Long) = dao.getSongIdsForPlaylist(playlistId)
 
     override fun onCleared() {
+        videoController.release()
         musicController.release()
         super.onCleared()
     }

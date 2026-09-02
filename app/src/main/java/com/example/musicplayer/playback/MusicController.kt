@@ -8,7 +8,6 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.example.musicplayer.data.Song
-import com.example.musicplayer.data.Video
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 /** Playback UI state exposed to Compose screens. */
 data class PlaybackUiState(
     val currentSong: Song? = null,
-    val currentVideo: Video? = null,
     val isPlaying: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
@@ -26,13 +24,14 @@ data class PlaybackUiState(
     val volume: Float = 1f
 )
 
-/** Binds the Compose UI to the Media3 MediaController. */
+/**
+ * Thin wrapper that binds a [MediaController] to the running [PlaybackService]
+ * and republishes player state as a StateFlow the UI can collect.
+ */
 class MusicController(private val context: Context) {
 
     private var controller: MediaController? = null
-    private var audioQueue: List<Song> = emptyList()
-    private var videoQueue: List<Video> = emptyList()
-    private var playingVideo = false
+    private var queue: List<Song> = emptyList()
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -40,15 +39,13 @@ class MusicController(private val context: Context) {
     fun connect(onReady: () -> Unit) {
         val sessionToken = SessionToken(
             context,
-            ComponentName(context, PlaybackService::class.java)
+            ComponentName(context, com.example.musicplayer.playback.PlaybackService::class.java)
         )
         val future = MediaController.Builder(context, sessionToken).buildAsync()
         future.addListener({
-            runCatching { future.get() }.onSuccess {
-                controller = it
-                attachListener()
-                onReady()
-            }
+            controller = future.get()
+            attachListener()
+            onReady()
         }, MoreExecutors.directExecutor())
     }
 
@@ -59,23 +56,11 @@ class MusicController(private val context: Context) {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                if (playingVideo) {
-                    val video = videoQueue.find { it.id.toString() == mediaItem?.mediaId }
-                    _state.value = _state.value.copy(
-                        currentSong = null,
-                        currentVideo = video,
-                        durationMs = controller?.duration?.coerceAtLeast(0) ?: 0L,
-                        positionMs = 0L
-                    )
-                } else {
-                    val song = audioQueue.find { it.id.toString() == mediaItem?.mediaId }
-                    _state.value = _state.value.copy(
-                        currentSong = song,
-                        currentVideo = null,
-                        durationMs = controller?.duration?.coerceAtLeast(0) ?: 0L,
-                        positionMs = 0L
-                    )
-                }
+                val song = queue.find { it.id.toString() == mediaItem?.mediaId }
+                _state.value = _state.value.copy(
+                    currentSong = song,
+                    durationMs = controller?.duration?.coerceAtLeast(0) ?: 0L
+                )
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -88,6 +73,7 @@ class MusicController(private val context: Context) {
         })
     }
 
+    /** Call periodically (e.g. every 500ms) from the UI to update the seek bar position. */
     fun pollPosition() {
         val c = controller ?: return
         _state.value = _state.value.copy(
@@ -97,11 +83,7 @@ class MusicController(private val context: Context) {
     }
 
     fun playQueue(songs: List<Song>, startIndex: Int) {
-        if (songs.isEmpty()) return
-        playingVideo = false
-        audioQueue = songs
-        videoQueue = emptyList()
-
+        queue = songs
         val items = songs.map { song ->
             MediaItem.Builder()
                 .setMediaId(song.id.toString())
@@ -115,48 +97,12 @@ class MusicController(private val context: Context) {
                 )
                 .build()
         }
-
         controller?.apply {
-            setMediaItems(items, startIndex.coerceIn(0, items.lastIndex), 0L)
+            setMediaItems(items, startIndex, 0L)
             prepare()
             play()
         }
-
-        _state.value = _state.value.copy(
-            currentSong = songs.getOrNull(startIndex),
-            currentVideo = null,
-            positionMs = 0L,
-            durationMs = songs.getOrNull(startIndex)?.duration ?: 0L
-        )
-    }
-
-    fun playVideo(video: Video) {
-        playingVideo = true
-        audioQueue = emptyList()
-        videoQueue = listOf(video)
-
-        val item = MediaItem.Builder()
-            .setMediaId(video.id.toString())
-            .setUri(video.uriString)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(video.title)
-                    .build()
-            )
-            .build()
-
-        controller?.apply {
-            setMediaItem(item, 0L)
-            prepare()
-            play()
-        }
-
-        _state.value = _state.value.copy(
-            currentSong = null,
-            currentVideo = video,
-            positionMs = 0L,
-            durationMs = video.duration
-        )
+        _state.value = _state.value.copy(currentSong = songs.getOrNull(startIndex))
     }
 
     fun playPause() {
@@ -165,12 +111,13 @@ class MusicController(private val context: Context) {
 
     fun next() = controller?.seekToNextMediaItem()
     fun previous() = controller?.seekToPreviousMediaItem()
-    fun seekTo(positionMs: Long) = controller?.seekTo(positionMs.coerceAtLeast(0L))
+    fun seekTo(positionMs: Long) = controller?.seekTo(positionMs)
 
     fun toggleShuffle() {
         controller?.let { it.shuffleModeEnabled = !it.shuffleModeEnabled }
     }
 
+    /** Cycles OFF -> ALL -> ONE -> OFF */
     fun cycleRepeatMode() {
         val c = controller ?: return
         c.repeatMode = when (c.repeatMode) {
@@ -181,18 +128,8 @@ class MusicController(private val context: Context) {
     }
 
     fun setVolume(volume: Float) {
-        val safeVolume = volume.coerceIn(0f, 1f)
-        controller?.volume = safeVolume
-        _state.value = _state.value.copy(volume = safeVolume)
-    }
-
-    fun stop() {
-        controller?.stop()
-        controller?.clearMediaItems()
-        audioQueue = emptyList()
-        videoQueue = emptyList()
-        playingVideo = false
-        _state.value = PlaybackUiState()
+        controller?.volume = volume.coerceIn(0f, 1f)
+        _state.value = _state.value.copy(volume = volume)
     }
 
     fun release() {

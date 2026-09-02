@@ -5,41 +5,45 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
-private val Purple80 = Color(0xFFD0BCFF)
-private val PurpleGrey80 = Color(0xFFCCC2DC)
-private val Pink80 = Color(0xFFEFB8C8)
+private val AceOrange = Color(0xFFFF6A00)
+private val AceAmber = Color(0xFFFFB000)
+private val AceBackground = Color(0xFF080A0F)
+private val AceSurface = Color(0xFF15171C)
+private val AceSurfaceVariant = Color(0xFF20242B)
+private val AceText = Color(0xFFF5F5F5)
+private val AceMuted = Color(0xFFB8BDC7)
 
-private val Purple40 = Color(0xFF6650a4)
-private val PurpleGrey40 = Color(0xFF625b71)
-private val Pink40 = Color(0xFF7D5260)
-
-private val DarkColors = darkColorScheme(
-    primary = Purple80, secondary = PurpleGrey80, tertiary = Pink80
+private val AceDarkColors = darkColorScheme(
+    primary = AceOrange,
+    onPrimary = Color.White,
+    secondary = AceAmber,
+    onSecondary = Color.Black,
+    background = AceBackground,
+    onBackground = AceText,
+    surface = AceSurface,
+    onSurface = AceText,
+    surfaceVariant = AceSurfaceVariant,
+    onSurfaceVariant = AceMuted
 )
-private val LightColors = lightColorScheme(
-    primary = Purple40, secondary = PurpleGrey40, tertiary = Pink40
+
+private val AceLightColors = lightColorScheme(
+    primary = Color(0xFFE85D00),
+    onPrimary = Color.White,
+    secondary = Color(0xFFC88700),
+    onSecondary = Color.White
 )
 
 @Composable
 fun MusicPlayerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    darkTheme: Boolean = true,
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
+    val colorScheme = if (darkTheme) AceDarkColors else AceLightColors
 
     MaterialTheme(
         colorScheme = colorScheme,
