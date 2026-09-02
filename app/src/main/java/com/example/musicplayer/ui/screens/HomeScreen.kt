@@ -3,9 +3,9 @@ package com.example.musicplayer.ui.screens
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Equalizer
 import androidx.compose.material.icons.filled.Favorite
@@ -25,8 +25,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.example.musicplayer.viewmodel.MusicViewModel
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -38,10 +41,30 @@ fun HomeScreen(
     onOpenVideo: (Long) -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(
+        initialPage = selectedTab,
+        pageCount = { 2 }
+    )
 
     LaunchedEffect(Unit) {
         viewModel.scanLibrary()
         viewModel.scanVideos()
+    }
+
+    // Keep the tab indicator synchronized with a swipe.
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                selectedTab = page
+            }
+    }
+
+    // Keep tab clicks synchronized with the pager.
+    LaunchedEffect(selectedTab) {
+        if (pagerState.currentPage != selectedTab) {
+            pagerState.animateScrollToPage(selectedTab)
+        }
     }
 
     Scaffold(
@@ -81,18 +104,17 @@ fun HomeScreen(
                 )
             }
 
-            if (selectedTab == 0) {
-                AudioLibraryContent(
-                    viewModel = viewModel,
-                    onOpenEqualizer = onOpenEqualizer,
-                    onOpenSettings = onOpenSettings,
-                    onOpenFavorites = onOpenFavorites
-                )
-            } else {
-                VideoLibraryScreen(
-                    viewModel = viewModel,
-                    onVideoClick = onOpenVideo
-                )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> AudioLibraryContent(viewModel = viewModel)
+                    1 -> VideoLibraryScreen(
+                        viewModel = viewModel,
+                        onVideoClick = onOpenVideo
+                    )
+                }
             }
         }
     }
@@ -100,10 +122,7 @@ fun HomeScreen(
 
 @Composable
 private fun AudioLibraryContent(
-    viewModel: MusicViewModel,
-    onOpenEqualizer: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenFavorites: () -> Unit
+    viewModel: MusicViewModel
 ) {
     val songs by viewModel.allSongs.collectAsState()
     val favorites by viewModel.favoriteIds.collectAsState()

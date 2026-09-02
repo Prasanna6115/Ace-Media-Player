@@ -1,7 +1,9 @@
 package com.example.musicplayer.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -11,36 +13,26 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.musicplayer.playback.EqualizerController
 import com.example.musicplayer.playback.PlaybackService
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EqualizerScreen(
     onBack: () -> Unit
 ) {
-    val equalizer = remember {
-        EqualizerController()
-    }
-
-    var enabled by remember {
-        mutableStateOf(false)
-    }
-
-    var attached by remember {
-        mutableStateOf(false)
-    }
+    val equalizer = remember { EqualizerController() }
+    var enabled by remember { mutableStateOf(false) }
+    var attached by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val player = PlaybackService.instance?.player
         val sessionId = player?.audioSessionId
-
         if (sessionId != null && sessionId != 0) {
             equalizer.attach(sessionId)
             enabled = equalizer.isEnabled()
@@ -49,9 +41,7 @@ fun EqualizerScreen(
     }
 
     DisposableEffect(Unit) {
-        onDispose {
-            equalizer.release()
-        }
+        onDispose { equalizer.release() }
     }
 
     Scaffold(
@@ -65,77 +55,40 @@ fun EqualizerScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(
-                        onClick = onBack
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 modifier = Modifier.height(58.dp)
             )
         }
     ) { paddingValues ->
-
         if (!attached) {
-
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Play a song first",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text("Play a song first")
             }
-
         } else {
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .verticalScroll(
-                        rememberScrollState()
-                    )
+                    .verticalScroll(rememberScrollState())
             ) {
-
-                // =========================================================
-                // EQUALIZER GRAPH
-                // =========================================================
-
-                EqualizerGraph(
-                    equalizer = equalizer
-                )
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
-                // =========================================================
-                // ENABLE EQUALIZER
-                // =========================================================
+                EqualizerGraph(equalizer)
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(58.dp)
-                        .padding(
-                            horizontal = 20.dp
-                        ),
+                        .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-
-                    Text(
-                        text = "Equalizer",
-                        fontSize = 18.sp,
-                        modifier = Modifier.weight(1f)
-                    )
-
+                    Text("Equalizer", fontSize = 18.sp, modifier = Modifier.weight(1f))
                     Switch(
                         checked = enabled,
                         onCheckedChange = {
@@ -145,304 +98,188 @@ fun EqualizerScreen(
                     )
                 }
 
-                // =========================================================
-                // PRESETS
-                // =========================================================
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(Modifier.height(8.dp))
 
                 Text(
-                    text = "Presets",
+                    "Presets",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(
-                        horizontal = 20.dp
-                    )
+                    modifier = Modifier.padding(horizontal = 20.dp)
                 )
 
-                Spacer(
-                    modifier = Modifier.height(8.dp)
-                )
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp))
 
-                HorizontalDivider(
-                    modifier = Modifier.padding(
-                        horizontal = 20.dp
-                    ),
-                    thickness = 1.dp
-                )
-
-                val presets = equalizer.presetNames()
-
-                presets.forEachIndexed { index, preset ->
-
+                equalizer.presetNames().forEachIndexed { index, preset ->
                     TextButton(
-                        onClick = {
-                            equalizer.applyPreset(
-                                index.toShort()
-                            )
-                        },
+                        onClick = { equalizer.applyPreset(index.toShort()) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp)
-                            .padding(
-                                horizontal = 8.dp
-                            ),
-                        contentPadding = PaddingValues(
-                            horizontal = 12.dp
-                        )
+                            .padding(horizontal = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
-
                         Text(
                             text = preset,
                             modifier = Modifier.fillMaxWidth(),
                             fontSize = 17.sp,
-                            fontWeight = FontWeight.Normal,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 }
 
-                Spacer(
-                    modifier = Modifier.height(16.dp)
-                )
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
 }
 
-
-// ========================================================================
-// EQUALIZER GRAPH
-// ========================================================================
-
 @Composable
-private fun EqualizerGraph(
-    equalizer: EqualizerController
-) {
-
-    val range = equalizer.bandLevelRange
-
-    val minLevel = range[0].toFloat()
-    val maxLevel = range[1].toFloat()
-
-    val bands = equalizer.numberOfBands
+private fun EqualizerGraph(equalizer: EqualizerController) {
+    val bands = equalizer.numberOfBands.toInt()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(330.dp)
+            .padding(top = 12.dp)
     ) {
-
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(285.dp)
-                .horizontalScroll(
-                    rememberScrollState()
-                )
-                .padding(
-                    horizontal = 28.dp
-                )
+                .height(315.dp)
+                .padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top
         ) {
-
-            Row(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .widthIn(
-                        min = 330.dp
-                    )
-                    .fillMaxWidth(),
-                horizontalArrangement =
-                    Arrangement.SpaceEvenly,
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                for (band in 0 until bands) {
-
-                    EqualizerBand(
-                        equalizer = equalizer,
-                        band = band,
-                        minLevel = minLevel,
-                        maxLevel = maxLevel
-                    )
-                }
+            for (band in 0 until bands) {
+                EqualizerBand(equalizer = equalizer, band = band)
             }
         }
-
-        // ================================================================
-        // RANGE
-        // ================================================================
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = 32.dp
-                ),
-            horizontalArrangement =
-                Arrangement.SpaceBetween
+                .padding(horizontal = 32.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-
-            Text(
-                text = "-12 dB",
-                fontSize = 10.sp
-            )
-
-            Text(
-                text = "0 dB",
-                fontSize = 10.sp
-            )
-
-            Text(
-                text = "+12 dB",
-                fontSize = 10.sp
-            )
+            Text("-12 dB", fontSize = 10.sp)
+            Text("0 dB", fontSize = 10.sp)
+            Text("+12 dB", fontSize = 10.sp)
         }
+
+        Spacer(Modifier.height(8.dp))
     }
 }
-
-
-// ========================================================================
-// SINGLE BAND
-// ========================================================================
 
 @Composable
 private fun EqualizerBand(
     equalizer: EqualizerController,
-    band: Int,
-    minLevel: Float,
-    maxLevel: Float
+    band: Int
 ) {
-
     val bandShort = band.toShort()
 
-    var level by remember {
-        mutableStateOf(
-            equalizer
-                .getBandLevel(bandShort)
-                .toFloat()
+    // The platform Equalizer exposes levels in millibels. We deliberately expose
+    // a normalized -12..+12 dB UI so the slider always has the full visible range.
+    val actualRange = equalizer.bandLevelRange
+    val actualMin = actualRange[0].toFloat()
+    val actualMax = actualRange[1].toFloat()
+
+    var dbLevel by remember(band, actualMin, actualMax) {
+        mutableFloatStateOf(
+            (equalizer.getBandLevel(bandShort).toFloat() / 100f)
+                .coerceIn(-12f, 12f)
         )
     }
 
+    val sliderHeight = 210.dp
+    val sliderHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        sliderHeight.toPx()
+    }
+
     Column(
-        modifier = Modifier
-            .width(48.dp)
-            .height(270.dp),
-        horizontalAlignment =
-            Alignment.CenterHorizontally
+        modifier = Modifier.width(54.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
-        // ================================================================
-        // FREQUENCY
-        // ================================================================
-
         Text(
-            text = formatFrequency(
-                equalizer.centerFrequency(
-                    bandShort
-                )
-            ),
+            text = formatFrequency(equalizer.centerFrequency(bandShort)),
             fontSize = 11.sp,
             maxLines = 1
         )
 
-        Spacer(
-            modifier = Modifier.height(8.dp)
-        )
-
-        // ================================================================
-        // SLIDER
-        // ================================================================
+        Spacer(Modifier.height(8.dp))
 
         Box(
             modifier = Modifier
-                .width(48.dp)
-                .height(205.dp),
+                .width(54.dp)
+                .height(235.dp),
             contentAlignment = Alignment.Center
         ) {
-
-            // Background line
+            // Full-height track with a clear center (0 dB) reference.
             Box(
                 modifier = Modifier
-                    .width(2.dp)
-                    .height(180.dp)
-                    .background(
-                        MaterialTheme
-                            .colorScheme
-                            .outline
+                    .width(3.dp)
+                    .height(sliderHeight)
+                    .background(MaterialTheme.colorScheme.outline)
+            )
+
+            Box(
+                modifier = Modifier
+                    .width(54.dp)
+                    .height(sliderHeight)
+                    .draggable(
+                        orientation = Orientation.Vertical,
+                        state = rememberDraggableState { delta ->
+                            // Drag upward raises dB, downward lowers dB.
+                            val pixelsPerDb = sliderHeightPx / 24f
+                            dbLevel = (dbLevel - delta / pixelsPerDb)
+                                .coerceIn(-12f, 12f)
+
+                            val actual = (dbLevel / 12f)
+                                .let { normalized ->
+                                    if (normalized >= 0f) {
+                                        normalized * actualMax
+                                    } else {
+                                        normalized * -actualMin
+                                    }
+                                }
+                                .roundToInt()
+                                .toShort()
+
+                            equalizer.setBandLevel(bandShort, actual)
+                        }
                     )
             )
 
-            Slider(
-                value = level,
-
-                onValueChange = {
-                    level = it
-
-                    equalizer.setBandLevel(
-                        bandShort,
-                        it.toInt().toShort()
-                    )
-                },
-
-                valueRange =
-                    minLevel..maxLevel,
-
+            // Thumb position mapped across the complete -12..+12 track.
+            val normalized = ((dbLevel + 12f) / 24f).coerceIn(0f, 1f)
+            Box(
                 modifier = Modifier
-                    .width(205.dp)
-                    .height(38.dp)
-                    .rotate(270f)
+                    .align(Alignment.Center)
+                    .offset(
+                        y = with(androidx.compose.ui.platform.LocalDensity.current) {
+                            ((0.5f - normalized) * sliderHeightPx).toDp()
+                        }
+                    )
+                    .size(28.dp)
+                    .background(Color(0xFFFF6A00), shape = MaterialTheme.shapes.extraLarge)
             )
         }
 
-        Spacer(
-            modifier = Modifier.height(5.dp)
-        )
-
-        // ================================================================
-        // DB VALUE
-        // ================================================================
-
         Text(
-            text = String.format(
-                "%.1f dB",
-                level / 100f
-            ),
+            text = String.format("%.1f dB", dbLevel),
             fontSize = 10.sp,
             maxLines = 1
         )
     }
 }
 
-
-// ========================================================================
-// FREQUENCY FORMAT
-// ========================================================================
-
-private fun formatFrequency(
-    frequency: Int
-): String {
-
+private fun formatFrequency(frequency: Int): String {
     return when {
-
         frequency >= 1000 -> {
             val khz = frequency / 1000f
-
-            if (khz % 1f == 0f) {
-                "${khz.toInt()}KHz"
-            } else {
-                String.format(
-                    "%.1fKHz",
-                    khz
-                )
-            }
+            if (khz % 1f == 0f) "${khz.toInt()}KHz"
+            else String.format("%.1fKHz", khz)
         }
-
-        else -> {
-            "${frequency}Hz"
-        }
+        else -> "${frequency}Hz"
     }
 }

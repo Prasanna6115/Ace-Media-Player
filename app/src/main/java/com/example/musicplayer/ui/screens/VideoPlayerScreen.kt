@@ -327,41 +327,49 @@ private fun VideoControls(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+            // Keep the main transport controls low in the video area, directly above
+            // the bottom seek/control panel instead of leaving them in the vertical center.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.BottomCenter
             ) {
-                IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }) {
-                    Icon(Icons.Filled.Replay10, "Rewind 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
-                }
-                IconButton(onClick = onPrevious) {
-                    Icon(Icons.Filled.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(38.dp))
-                }
-                FilledIconButton(
-                    onClick = onPlayPause,
-                    modifier = Modifier.size(72.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFFF6A00))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 14.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        "Play/Pause",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(38.dp))
-                }
-                IconButton(onClick = { onSeek(state.positionMs + 10_000L) }) {
-                    Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
+                    IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }) {
+                        Icon(Icons.Filled.Replay10, "Rewind 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                    IconButton(onClick = onPrevious) {
+                        Icon(Icons.Filled.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(38.dp))
+                    }
+                    FilledIconButton(
+                        onClick = onPlayPause,
+                        modifier = Modifier.size(72.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFFF6A00))
+                    ) {
+                        Icon(
+                            if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            "Play/Pause",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(Icons.Filled.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(38.dp))
+                    }
+                    IconButton(onClick = { onSeek(state.positionMs + 10_000L) }) {
+                        Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-
+            // Seek bar, timestamps and secondary controls stay anchored to the bottom.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
