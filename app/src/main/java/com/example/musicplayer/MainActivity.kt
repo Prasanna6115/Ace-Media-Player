@@ -78,6 +78,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onUserLeaveHint() {
+        // Videos must stop/pause when the app is intentionally minimized.
+        // Music playback remains owned by MusicController and continues normally.
+        viewModel.videoPauseForBackground()
+        super.onUserLeaveHint()
+    }
+
     private fun requestNeededPermissions() {
         val permissions = mutableListOf<String>()
 

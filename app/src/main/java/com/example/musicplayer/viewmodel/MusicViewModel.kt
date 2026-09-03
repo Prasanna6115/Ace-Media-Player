@@ -56,8 +56,29 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val _darkTheme = MutableStateFlow(preferences.getBoolean("dark_theme", true))
     val darkTheme: StateFlow<Boolean> = _darkTheme.asStateFlow()
 
+    private val _autoPlayNext = MutableStateFlow(preferences.getBoolean("video_auto_play_next", true))
+    val autoPlayNext: StateFlow<Boolean> = _autoPlayNext.asStateFlow()
+    private val _resumePlayback = MutableStateFlow(preferences.getBoolean("video_resume_playback", true))
+    val resumePlayback: StateFlow<Boolean> = _resumePlayback.asStateFlow()
+    private val _keepScreenOn = MutableStateFlow(preferences.getBoolean("video_keep_screen_on", true))
+    val keepScreenOn: StateFlow<Boolean> = _keepScreenOn.asStateFlow()
+    private val _gestureDoubleTap = MutableStateFlow(preferences.getBoolean("gesture_double_tap", true))
+    val gestureDoubleTap: StateFlow<Boolean> = _gestureDoubleTap.asStateFlow()
+    private val _gestureSeek = MutableStateFlow(preferences.getBoolean("gesture_seek", true))
+    val gestureSeek: StateFlow<Boolean> = _gestureSeek.asStateFlow()
+    private val _gestureVolume = MutableStateFlow(preferences.getBoolean("gesture_volume", true))
+    val gestureVolume: StateFlow<Boolean> = _gestureVolume.asStateFlow()
+    private val _gestureBrightness = MutableStateFlow(preferences.getBoolean("gesture_brightness", true))
+    val gestureBrightness: StateFlow<Boolean> = _gestureBrightness.asStateFlow()
+    private val _gestureLongPress = MutableStateFlow(preferences.getBoolean("gesture_long_press", true))
+    val gestureLongPress: StateFlow<Boolean> = _gestureLongPress.asStateFlow()
+    private val _gestureZoom = MutableStateFlow(preferences.getBoolean("gesture_zoom", true))
+    val gestureZoom: StateFlow<Boolean> = _gestureZoom.asStateFlow()
+
     init {
         musicController.connect { /* controller ready */ }
+        videoController.setAutoPlayNext(_autoPlayNext.value)
+        videoController.setResumePlayback(_resumePlayback.value)
         videoController.connect()
     }
 
@@ -124,8 +145,36 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun videoToggleShuffle() = videoController.toggleShuffle()
     fun videoCycleRepeatMode() = videoController.cycleRepeatMode()
     fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
+    fun videoSetPlaybackSpeed(speed: Float) = videoController.setPlaybackSpeed(speed)
+    fun videoAudioTracks() = videoController.audioTracks()
+    fun selectAudioTrack(track: com.example.musicplayer.playback.AudioTrack?) = videoController.selectAudio(track)
     fun pollVideoPosition() = videoController.pollPosition()
     fun videoPlayer() = videoController.player()
+
+    fun setAutoPlayNext(enabled: Boolean) {
+        _autoPlayNext.value = enabled
+        videoController.setAutoPlayNext(enabled)
+    }
+
+    fun setResumePlayback(enabled: Boolean) {
+        _resumePlayback.value = enabled
+        videoController.setResumePlayback(enabled)
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        _keepScreenOn.value = enabled
+        preferences.edit().putBoolean("video_keep_screen_on", enabled).apply()
+    }
+
+    fun setGestureDoubleTap(enabled: Boolean) { _gestureDoubleTap.value = enabled; preferences.edit().putBoolean("gesture_double_tap", enabled).apply() }
+    fun setGestureSeek(enabled: Boolean) { _gestureSeek.value = enabled; preferences.edit().putBoolean("gesture_seek", enabled).apply() }
+    fun setGestureVolume(enabled: Boolean) { _gestureVolume.value = enabled; preferences.edit().putBoolean("gesture_volume", enabled).apply() }
+    fun setGestureBrightness(enabled: Boolean) { _gestureBrightness.value = enabled; preferences.edit().putBoolean("gesture_brightness", enabled).apply() }
+    fun setGestureLongPress(enabled: Boolean) { _gestureLongPress.value = enabled; preferences.edit().putBoolean("gesture_long_press", enabled).apply() }
+    fun setGestureZoom(enabled: Boolean) { _gestureZoom.value = enabled; preferences.edit().putBoolean("gesture_zoom", enabled).apply() }
+
+    fun videoPauseForBackground() = videoController.pauseForBackground()
+
     fun setSubtitlesEnabled(enabled: Boolean) = videoController.setSubtitlesEnabled(enabled)
     fun selectSubtitle(track: com.example.musicplayer.playback.SubtitleTrack?) = videoController.selectSubtitle(track)
 

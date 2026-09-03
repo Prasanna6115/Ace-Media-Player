@@ -9,25 +9,33 @@ import android.net.Uri
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
@@ -51,7 +59,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -71,8 +78,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -82,13 +87,15 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.foundation.Image
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.musicplayer.playback.AudioTrack
 import com.example.musicplayer.playback.SubtitleTrack
 import com.example.musicplayer.viewmodel.MusicViewModel
 import kotlinx.coroutines.Dispatchers
@@ -99,11 +106,21 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private enum class GestureKind { NONE, TAP, HORIZONTAL_SEEK, VOLUME, BRIGHTNESS }
-private enum class DisplayMode(val label: String, val resizeMode: Int) {
-    FIT("Fit", AspectRatioFrameLayout.RESIZE_MODE_FIT),
-    FILL("Fill", AspectRatioFrameLayout.RESIZE_MODE_FILL),
-    CROP("Crop", AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+private enum class GestureKind { NONE, TAP, HORIZONTAL_SEEK, VOLUME, BRIGHTNESS, SPEED, ZOOM }
+
+private enum class DisplayMode(
+    val label: String,
+    val resizeMode: Int,
+    val ratio: Float? = null
+) {
+    ORIGINAL("Original", AspectRatioFrameLayout.RESIZE_MODE_FIT),
+    FIT("Fit Screen", AspectRatioFrameLayout.RESIZE_MODE_FIT),
+    FILL("Fill Screen", AspectRatioFrameLayout.RESIZE_MODE_FILL),
+    CROP("Crop", AspectRatioFrameLayout.RESIZE_MODE_ZOOM),
+    RATIO_16_9("16:9", AspectRatioFrameLayout.RESIZE_MODE_FIT, 16f / 9f),
+    RATIO_4_3("4:3", AspectRatioFrameLayout.RESIZE_MODE_FIT, 4f / 3f),
+    RATIO_1_1("1:1", AspectRatioFrameLayout.RESIZE_MODE_FIT, 1f),
+    RATIO_21_9("21:9", AspectRatioFrameLayout.RESIZE_MODE_FIT, 21f / 9f)
 }
 
 private data class GestureOverlayState(
@@ -122,7 +139,17 @@ fun VideoPlayerScreen(
     val activity = context as? Activity
     val state by viewModel.videoPlaybackState.collectAsState()
     val videos by viewModel.allVideos.collectAsState()
+    val keepScreenOn by viewModel.keepScreenOn.collectAsState()
+    val doubleTapEnabled by viewModel.gestureDoubleTap.collectAsState()
+    val seekGestureEnabled by viewModel.gestureSeek.collectAsState()
+    val volumeGestureEnabled by viewModel.gestureVolume.collectAsState()
+    val brightnessGestureEnabled by viewModel.gestureBrightness.collectAsState()
+    val longPressEnabled by viewModel.gestureLongPress.collectAsState()
+    val zoomGestureEnabled by viewModel.gestureZoom.collectAsState()
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+    val screenHeightPx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
 
     var controlsVisible by remember { mutableStateOf(true) }
     var fullscreen by remember { mutableStateOf(true) }
@@ -130,9 +157,10 @@ fun VideoPlayerScreen(
     var showUnlockPrompt by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
+    var showAudioMenu by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var gestureOverlay by remember { mutableStateOf(GestureOverlayState()) }
-    var displayMode by remember { mutableStateOf(DisplayMode.FIT) }
+    var displayMode by remember { mutableStateOf(DisplayMode.ORIGINAL) }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var previewPosition by remember { mutableLongStateOf(0L) }
     var previewJob by remember { mutableStateOf<Job?>(null) }
@@ -151,7 +179,11 @@ fun VideoPlayerScreen(
     fun applyImmersive(enabled: Boolean) {
         activity?.window?.let { window ->
             if (enabled) {
-                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                if (keepScreenOn) {
+                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                } else {
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
                 @Suppress("DEPRECATION")
                 window.decorView.systemUiVisibility = (
                     View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -184,6 +216,7 @@ fun VideoPlayerScreen(
         controlsLocked = !controlsLocked
         showSettings = false
         showSubtitleMenu = false
+        showAudioMenu = false
         if (controlsLocked) {
             fullscreen = true
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -193,6 +226,11 @@ fun VideoPlayerScreen(
         } else {
             showControls()
         }
+    }
+
+    DisposableEffect(keepScreenOn) {
+        applyImmersive(fullscreen)
+        onDispose { }
     }
 
     DisposableEffect(Unit) {
@@ -220,6 +258,7 @@ fun VideoPlayerScreen(
             controlsVisible = false
             showSettings = false
             showSubtitleMenu = false
+            showAudioMenu = false
         }
     }
 
@@ -232,6 +271,7 @@ fun VideoPlayerScreen(
 
     BackHandler {
         when {
+            showAudioMenu -> showAudioMenu = false
             showSubtitleMenu -> showSubtitleMenu = false
             showSettings -> showSettings = false
             fullscreen -> exitFullscreen()
@@ -242,73 +282,82 @@ fun VideoPlayerScreen(
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val player = viewModel.videoPlayer()
         if (player != null) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        this.player = player
-                        keepScreenOn = true
-                        resizeMode = displayMode.resizeMode
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                val modeRatio = displayMode.ratio
+                val surfaceModifier = if (modeRatio == null) {
+                    Modifier.fillMaxSize()
+                } else {
+                    val screenRatio = (maxWidth.value / maxHeight.value).coerceAtLeast(0.1f)
+                    if (screenRatio >= modeRatio) {
+                        Modifier
+                            .fillMaxHeight()
+                            .aspectRatio(modeRatio)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(modeRatio)
                     }
-                },
-                update = {
-                    it.player = player
-                    it.resizeMode = displayMode.resizeMode
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = zoomScale
-                        scaleY = zoomScale
-                        translationX = zoomPanX
-                        translationY = zoomPanY
-                        clip = true
-                    }
-            )
+                }
+
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            useController = false
+                            this.player = player
+                            keepScreenOn = keepScreenOn
+                            resizeMode = displayMode.resizeMode
+                            setShutterBackgroundColor(android.graphics.Color.BLACK)
+                        }
+                    },
+                    update = {
+                        it.player = player
+                        it.keepScreenOn = keepScreenOn
+                        it.resizeMode = displayMode.resizeMode
+                    },
+                    modifier = surfaceModifier
+                        .graphicsLayer {
+                            scaleX = zoomScale
+                            scaleY = zoomScale
+                            translationX = zoomPanX
+                            translationY = zoomPanY
+                            clip = true
+                        }
+                )
+            }
 
             val latestState by androidx.compose.runtime.rememberUpdatedState(state)
             val latestActivity by androidx.compose.runtime.rememberUpdatedState(activity)
 
-            // Gesture layer: horizontal drag = seek; left vertical = brightness; right vertical = volume.
-            // Tap and drag handlers are on the same layer so neither blocks the other.
+            val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+                if (!controlsLocked && zoomGestureEnabled) {
+                    val nextScale = (zoomScale * zoomChange).coerceIn(1f, 4f)
+                    zoomScale = nextScale
+                    val maxX = (screenWidthPx * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                    val maxY = (screenHeightPx * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                    zoomPanX = (zoomPanX + panChange.x).coerceIn(-maxX, maxX)
+                    zoomPanY = (zoomPanY + panChange.y).coerceIn(-maxY, maxY)
+                    controlsVisible = false
+                    gestureOverlay = GestureOverlayState(
+                        GestureKind.ZOOM,
+                        "Zoom ${"%.1f".format(nextScale)}×",
+                        Icons.Filled.Fullscreen
+                    )
+                }
+            }
+
             Box(
                 Modifier
                     .fillMaxSize()
                     .padding(top = 64.dp, bottom = 118.dp)
-                    .pointerInput(controlsLocked) {
-                        awaitEachGesture {
-                            var multiTouchStarted = false
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val pressedCount = event.changes.count { it.pressed }
-                                if (pressedCount >= 2) {
-                                    val zoom = event.calculateZoom()
-                                    val pan = event.calculatePan()
-                                    if (zoom != 1f || pan != Offset.Zero) {
-                                        if (!controlsLocked) {
-                                            val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
-                                            zoomScale = nextScale
-                                            val maxX = (size.width * (nextScale - 1f) / 2f).coerceAtLeast(0f)
-                                            val maxY = (size.height * (nextScale - 1f) / 2f).coerceAtLeast(0f)
-                                            zoomPanX = (zoomPanX + pan.x).coerceIn(-maxX, maxX)
-                                            zoomPanY = (zoomPanY + pan.y).coerceIn(-maxY, maxY)
-                                            controlsVisible = false
-                                            multiTouchStarted = true
-                                            gestureOverlay = GestureOverlayState(
-                                                kind = GestureKind.TAP,
-                                                value = if (nextScale <= 1.01f) "Zoom 1.0×" else "Zoom ${"%.1f".format(nextScale)}×",
-                                                icon = Icons.Filled.Fullscreen
-                                            )
-                                        }
-                                        event.changes.forEach { it.consume() }
-                                    }
-                                } else if (multiTouchStarted || pressedCount == 0) {
-                                    break
-                                }
-                            }
-                        }
-                    }
+                    .transformable(
+                        state = transformState,
+                        enabled = !controlsLocked && zoomGestureEnabled,
+                        lockRotationOnZoomPan = true,
+                        canPan = { zoomScale > 1.01f }
+                    )
                     .pointerInput(Unit) {
                         var dragVolumeBase = 1f
                         var dragBrightnessBase = 0.5f
@@ -317,10 +366,13 @@ fun VideoPlayerScreen(
                             onDragStart = {
                                 dragVolumeBase = latestState.volume
                                 dragVerticalDelta = 0f
-                                val window = latestActivity?.window
-                                dragBrightnessBase = window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.5f
+                                val brightness = latestActivity?.window?.attributes?.screenBrightness
+                                dragBrightnessBase = brightness?.takeIf { it >= 0f } ?: 0.5f
                             },
-                            onDragCancel = { gestureOverlay = GestureOverlayState(); controlsVisible = false },
+                            onDragCancel = {
+                                gestureOverlay = GestureOverlayState()
+                                controlsVisible = false
+                            },
                             onDragEnd = {
                                 interactionTick++
                                 scope.launch {
@@ -329,74 +381,84 @@ fun VideoPlayerScreen(
                                 }
                             },
                             onDrag = { change, dragAmount ->
-                                dragVerticalDelta += dragAmount.y
                                 val w = size.width.toFloat().coerceAtLeast(1f)
                                 val h = size.height.toFloat().coerceAtLeast(1f)
                                 val x = change.position.x
                                 val horizontal = abs(dragAmount.x) > abs(dragAmount.y)
+
                                 if (horizontal) {
+                                    if (!seekGestureEnabled) return@detectDragGestures
                                     val duration = latestState.durationMs.coerceAtLeast(1L)
                                     val delta = (dragAmount.x / w * duration * 0.65f).toLong()
                                     val target = (latestState.positionMs + delta).coerceIn(0L, duration)
                                     viewModel.videoSeekTo(target)
                                     gestureOverlay = GestureOverlayState(
-                                        kind = GestureKind.HORIZONTAL_SEEK,
-                                        value = "Seek ${formatVideoMs(target)}",
-                                        icon = if (delta >= 0) Icons.Filled.Forward10 else Icons.Filled.Replay10
+                                        GestureKind.HORIZONTAL_SEEK,
+                                        "Seek ${formatVideoMs(target)}",
+                                        if (delta >= 0) Icons.Filled.Forward10 else Icons.Filled.Replay10
                                     )
                                 } else if (x < w * 0.45f) {
-                                    val window = latestActivity?.window
-                                    if (window != null) {
-                                        val next = (dragBrightnessBase - dragVerticalDelta / h * 1.25f).coerceIn(0.05f, 1f)
-                                        val params = window.attributes
-                                        params.screenBrightness = next
-                                        window.attributes = params
-                                        gestureOverlay = GestureOverlayState(
-                                            kind = GestureKind.BRIGHTNESS,
-                                            value = "Brightness ${((next * 100f).roundToInt())}%",
-                                            icon = Icons.Filled.Brightness6
-                                        )
-                                    }
+                                    if (!brightnessGestureEnabled) return@detectDragGestures
+                                    val window = latestActivity?.window ?: return@detectDragGestures
+                                    dragVerticalDelta += dragAmount.y
+                                    val next = (dragBrightnessBase - dragVerticalDelta / h * 1.25f).coerceIn(0.05f, 1f)
+                                    val params = window.attributes
+                                    params.screenBrightness = next
+                                    window.attributes = params
+                                    gestureOverlay = GestureOverlayState(
+                                        GestureKind.BRIGHTNESS,
+                                        "Brightness ${((next * 100f).roundToInt())}%",
+                                        Icons.Filled.Brightness6
+                                    )
                                 } else if (x > w * 0.55f) {
+                                    if (!volumeGestureEnabled) return@detectDragGestures
+                                    dragVerticalDelta += dragAmount.y
                                     val next = (dragVolumeBase - dragVerticalDelta / h * 1.25f).coerceIn(0f, 1f)
                                     viewModel.videoSetVolume(next)
                                     gestureOverlay = GestureOverlayState(
-                                        kind = GestureKind.VOLUME,
-                                        value = "Volume ${((next * 100f).roundToInt())}%",
-                                        icon = if (next <= 0f) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp
+                                        GestureKind.VOLUME,
+                                        "Volume ${((next * 100f).roundToInt())}%",
+                                        if (next <= 0f) Icons.Filled.VolumeOff else Icons.Filled.VolumeUp
                                     )
                                 }
                                 controlsVisible = false
                             }
                         )
                     }
-                    .pointerInput(controlsLocked) {
+                    .pointerInput(controlsLocked, doubleTapEnabled, longPressEnabled) {
+                        val screenWidth = size.width.toFloat().coerceAtLeast(1f)
                         detectTapGestures(
                             onDoubleTap = { offset ->
                                 if (controlsLocked) {
                                     showUnlockPrompt = true
                                     return@detectTapGestures
                                 }
-                                val w = size.width.toFloat().coerceAtLeast(1f)
+                                if (!doubleTapEnabled) return@detectTapGestures
                                 val duration = latestState.durationMs.coerceAtLeast(1L)
                                 when {
-                                    offset.x < w * 0.35f -> {
+                                    offset.x < screenWidth * 0.35f -> {
                                         val target = (latestState.positionMs - 10_000L).coerceAtLeast(0L)
                                         viewModel.videoSeekTo(target)
-                                        gestureOverlay = GestureOverlayState(GestureKind.HORIZONTAL_SEEK, "-10 sec • ${formatVideoMs(target)}", Icons.Filled.Replay10)
-                                        controlsVisible = false
+                                        gestureOverlay = GestureOverlayState(
+                                            GestureKind.HORIZONTAL_SEEK,
+                                            "-10 sec • ${formatVideoMs(target)}",
+                                            Icons.Filled.Replay10
+                                        )
                                     }
-                                    offset.x > w * 0.65f -> {
+                                    offset.x > screenWidth * 0.65f -> {
                                         val target = (latestState.positionMs + 10_000L).coerceAtMost(duration)
                                         viewModel.videoSeekTo(target)
-                                        gestureOverlay = GestureOverlayState(GestureKind.HORIZONTAL_SEEK, "+10 sec • ${formatVideoMs(target)}", Icons.Filled.Forward10)
-                                        controlsVisible = false
+                                        gestureOverlay = GestureOverlayState(
+                                            GestureKind.HORIZONTAL_SEEK,
+                                            "+10 sec • ${formatVideoMs(target)}",
+                                            Icons.Filled.Forward10
+                                        )
                                     }
                                     else -> {
                                         viewModel.videoPlayPause()
-                                        controlsVisible = false
                                     }
                                 }
+                                controlsVisible = false
                                 interactionTick++
                                 scope.launch {
                                     delay(850)
@@ -411,6 +473,25 @@ fun VideoPlayerScreen(
                                     controlsVisible = !controlsVisible
                                     interactionTick++
                                 }
+                            },
+                            onPress = { offset ->
+                                if (longPressEnabled && !controlsLocked && offset.x >= screenWidth * 0.65f) {
+                                    val speedJob = scope.launch {
+                                    delay(450)
+                                    viewModel.videoSetPlaybackSpeed(2f)
+                                    gestureOverlay = GestureOverlayState(GestureKind.SPEED, "2×", Icons.Filled.Forward10)
+                                    controlsVisible = false
+                                }
+                                    try {
+                                        tryAwaitRelease()
+                                    } finally {
+                                        speedJob.cancel()
+                                        viewModel.videoSetPlaybackSpeed(1f)
+                                        if (gestureOverlay.kind == GestureKind.SPEED) {
+                                            gestureOverlay = GestureOverlayState()
+                                        }
+                                    }
+                                }
                             }
                         )
                     }
@@ -420,15 +501,15 @@ fun VideoPlayerScreen(
         }
 
         if (gestureOverlay.kind != GestureKind.NONE && !controlsLocked) {
-            LaunchedEffect(gestureOverlay.kind, gestureOverlay.value) {
-                delay(650)
-                gestureOverlay = GestureOverlayState()
-            }
             GestureFeedback(gestureOverlay)
         }
 
         if (draggingSeek && previewBitmap != null) {
-            SeekFramePreview(previewBitmap!!, previewPosition, Modifier.align(Alignment.BottomCenter).padding(bottom = 92.dp))
+            SeekFramePreview(
+                previewBitmap!!,
+                previewPosition,
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp)
+            )
         }
 
         if (controlsLocked && showUnlockPrompt) {
@@ -452,10 +533,8 @@ fun VideoPlayerScreen(
                 fullscreen = fullscreen,
                 showSettings = showSettings,
                 onBack = { if (fullscreen) exitFullscreen() else onBack() },
-                onMore = { showSettings = !showSettings; interactionTick++ },
-                onSeek = { position ->
-                    viewModel.videoSeekTo(position)
-                },
+                onMore = { showSettings = !showSettings; showSubtitleMenu = false; showAudioMenu = false; interactionTick++ },
+                onSeek = viewModel::videoSeekTo,
                 onSeekFinished = {
                     draggingSeek = false
                     previewJob?.cancel()
@@ -467,7 +546,7 @@ fun VideoPlayerScreen(
                     draggingSeek = true
                     previewJob?.cancel()
                     previewJob = scope.launch {
-                        delay(60)
+                        delay(70)
                         val uri = selectedVideo?.uriString ?: return@launch
                         previewBitmap = extractVideoFrame(context, uri, position)
                     }
@@ -481,18 +560,32 @@ fun VideoPlayerScreen(
                     viewModel.videoSetVolume(if (state.volume > 0f) 0f else 1f)
                     showControls()
                 },
-                onSettings = { showSettings = !showSettings; showSubtitleMenu = false; interactionTick++ },
-                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; interactionTick++ },
+                onAudioMenu = { showAudioMenu = !showAudioMenu; showSettings = false; showSubtitleMenu = false; interactionTick++ },
+                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; showAudioMenu = false; interactionTick++ },
+                onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; interactionTick++ },
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
                 displayMode = displayMode,
                 onDisplayMode = { displayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
+                audioTracks = state.audioTracks,
+                selectedAudioKey = state.selectedAudioKey,
+                onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showControls() },
                 subtitles = state.subtitleTracks,
                 subtitlesEnabled = state.subtitlesEnabled,
                 selectedSubtitleKey = state.selectedSubtitleKey,
                 onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
                 onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() }
             )
+
+            if (showSettings && !controlsLocked) {
+                VideoSettingsMenu(
+                    displayMode = displayMode,
+                    zoomScale = zoomScale,
+                    onDisplayMode = { displayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
+                    onResetZoom = { zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showControls() },
+                    onClose = { showSettings = false }
+                )
+            }
 
             if (showSubtitleMenu && !controlsLocked) {
                 SubtitleMenu(
@@ -502,6 +595,15 @@ fun VideoPlayerScreen(
                     onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
                     onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() },
                     onClose = { showSubtitleMenu = false }
+                )
+            }
+
+            if (showAudioMenu && !controlsLocked) {
+                AudioMenu(
+                    audioTracks = state.audioTracks,
+                    selectedAudioKey = state.selectedAudioKey,
+                    onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showControls() },
+                    onClose = { showAudioMenu = false }
                 )
             }
         }
@@ -527,9 +629,7 @@ fun VideoPlayerScreen(
 private fun androidx.compose.foundation.layout.BoxScope.GestureFeedback(state: GestureOverlayState) {
     val icon = state.icon ?: Icons.Filled.Settings
     Card(
-        Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = 22.dp, start = 28.dp, end = 28.dp),
+        Modifier.align(Alignment.TopCenter).padding(top = 22.dp, start = 28.dp, end = 28.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xDD101216))
     ) {
         Row(
@@ -576,12 +676,16 @@ private fun VideoControls(
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onVolume: () -> Unit,
-    onSettings: () -> Unit,
+    onAudioMenu: () -> Unit,
     onSubtitleMenu: () -> Unit,
+    onSettings: () -> Unit,
     onLock: () -> Unit,
     onFullscreen: () -> Unit,
     displayMode: DisplayMode,
     onDisplayMode: (DisplayMode) -> Unit,
+    audioTracks: List<AudioTrack>,
+    selectedAudioKey: String?,
+    onSelectAudio: (AudioTrack?) -> Unit,
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
@@ -605,19 +709,36 @@ private fun VideoControls(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }) { Icon(Icons.Filled.Replay10, "Rewind 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
-                    IconButton(onClick = onPrevious) { Icon(Icons.Filled.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(38.dp)) }
+                    IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }) {
+                        Icon(Icons.Filled.Replay10, "Rewind 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
+                    IconButton(onClick = onPrevious) {
+                        Icon(Icons.Filled.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(38.dp))
+                    }
                     FilledIconButton(
                         onClick = onPlayPause,
                         modifier = Modifier.size(72.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFFF6A00))
-                    ) { Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause", tint = Color.White, modifier = Modifier.size(40.dp)) }
-                    IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(38.dp)) }
-                    IconButton(onClick = { onSeek((state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L))) }) { Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp)) }
+                    ) {
+                        Icon(
+                            if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            "Play/Pause",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(Icons.Filled.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(38.dp))
+                    }
+                    IconButton(onClick = { onSeek((state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L))) }) {
+                        Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
+                    }
                 }
             }
 
-            Column(Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Column(
+                Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
                 val max = state.durationMs.coerceAtLeast(1L).toFloat()
                 Slider(
                     value = state.positionMs.toFloat().coerceIn(0f, max),
@@ -635,29 +756,37 @@ private fun VideoControls(
                     Spacer(Modifier.weight(1f))
                     Text(formatVideoMs(state.durationMs), color = Color.White, style = MaterialTheme.typography.labelSmall)
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onShuffle) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFFFF6A00) else Color.White) }
-                    IconButton(onClick = onRepeat) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White) }
-                    IconButton(onClick = onVolume) { Icon(if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff, "Volume", tint = Color.White) }
-                    IconButton(onClick = onSubtitleMenu) { Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White) }
-                    IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Video settings", tint = Color.White) }
-                    IconButton(onClick = onLock) { Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White) }
-                    IconButton(onClick = onFullscreen) { Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Fullscreen", tint = Color.White) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onShuffle) {
+                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFFFF6A00) else Color.White)
+                    }
+                    IconButton(onClick = onRepeat) {
+                        Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White)
+                    }
+                    IconButton(onClick = onVolume) {
+                        Icon(if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff, "Volume", tint = Color.White)
+                    }
+                    IconButton(onClick = onAudioMenu) {
+                        Icon(Icons.Filled.Audiotrack, "Audio tracks", tint = if (audioTracks.size > 1) Color(0xFFFFB000) else Color.White)
+                    }
+                    IconButton(onClick = onSubtitleMenu) {
+                        Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White)
+                    }
+                    IconButton(onClick = onSettings) {
+                        Icon(Icons.Filled.Settings, "Video settings", tint = Color.White)
+                    }
+                    IconButton(onClick = onLock) {
+                        Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White)
+                    }
+                    IconButton(onClick = onFullscreen) {
+                        Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Fullscreen", tint = Color.White)
+                    }
                 }
             }
-        }
-
-        if (showSettings) {
-            VideoSettingsMenu(
-                displayMode = displayMode,
-                onDisplayMode = onDisplayMode,
-                subtitles = subtitles,
-                subtitlesEnabled = subtitlesEnabled,
-                selectedSubtitleKey = selectedSubtitleKey,
-                onSubtitlesEnabled = onSubtitlesEnabled,
-                onSelectSubtitle = onSelectSubtitle,
-                onClose = onSettings
-            )
         }
     }
 }
@@ -665,31 +794,31 @@ private fun VideoControls(
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
     displayMode: DisplayMode,
+    zoomScale: Float,
     onDisplayMode: (DisplayMode) -> Unit,
-    subtitles: List<SubtitleTrack>,
-    subtitlesEnabled: Boolean,
-    selectedSubtitleKey: String?,
-    onSubtitlesEnabled: (Boolean) -> Unit,
-    onSelectSubtitle: (SubtitleTrack?) -> Unit,
+    onResetZoom: () -> Unit,
     onClose: () -> Unit
 ) {
     Card(
         Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
-        Column(
-            Modifier
-                .heightIn(max = 360.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(vertical = 6.dp)
-        ) {
-            Text("Display", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-            DisplayMode.values().forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(if (mode == displayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
-                    onClick = { onDisplayMode(mode) }
-                )
+        Column(Modifier.width(260.dp)) {
+            Text("Display & Aspect Ratio", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp)
+            ) {
+                items(DisplayMode.values().toList()) { mode ->
+                    DropdownMenuItem(
+                        text = { Text(if (mode == displayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
+                        onClick = { onDisplayMode(mode) }
+                    )
+                }
             }
+            DropdownMenuItem(
+                text = { Text("Reset Zoom (${String.format("%.1f", zoomScale)}×)", color = Color.White) },
+                onClick = onResetZoom
+            )
             DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
         }
     }
@@ -705,12 +834,12 @@ private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
     onClose: () -> Unit
 ) {
     Card(
-        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 96.dp),
+        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 72.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
+        Column(Modifier.width(250.dp)) {
             Text("Subtitles", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
                 TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
                     Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
@@ -719,12 +848,55 @@ private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
             if (subtitles.isEmpty()) {
                 Text("No subtitles available", color = Color.LightGray, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
             } else {
-                DropdownMenuItem(text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) }, onClick = { onSelectSubtitle(null) })
-                subtitles.forEach { track ->
-                    DropdownMenuItem(
-                        text = { Text(if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label, color = Color.White) },
-                        onClick = { onSelectSubtitle(track) }
-                    )
+                LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    item {
+                        DropdownMenuItem(
+                            text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) },
+                            onClick = { onSelectSubtitle(null) }
+                        )
+                    }
+                    items(subtitles) { track ->
+                        DropdownMenuItem(
+                            text = { Text(if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label, color = Color.White) },
+                            onClick = { onSelectSubtitle(track) }
+                        )
+                    }
+                }
+            }
+            DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.AudioMenu(
+    audioTracks: List<AudioTrack>,
+    selectedAudioKey: String?,
+    onSelectAudio: (AudioTrack?) -> Unit,
+    onClose: () -> Unit
+) {
+    Card(
+        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 124.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
+    ) {
+        Column(Modifier.width(250.dp)) {
+            Text("Audio Track", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+            if (audioTracks.isEmpty()) {
+                Text("Default audio", color = Color.LightGray, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+            } else {
+                LazyColumn(Modifier.heightIn(max = 300.dp)) {
+                    item {
+                        DropdownMenuItem(
+                            text = { Text(if (selectedAudioKey == null) "✓ Auto" else "Auto", color = Color.White) },
+                            onClick = { onSelectAudio(null) }
+                        )
+                    }
+                    items(audioTracks) { track ->
+                        DropdownMenuItem(
+                            text = { Text(if (track.key == selectedAudioKey) "✓ ${track.label}" else track.label, color = Color.White) },
+                            onClick = { onSelectAudio(track) }
+                        )
+                    }
                 }
             }
             DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
