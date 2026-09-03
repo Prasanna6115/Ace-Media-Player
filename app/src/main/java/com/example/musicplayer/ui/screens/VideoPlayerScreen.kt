@@ -590,9 +590,7 @@ fun VideoPlayerScreen(
                 subtitlesEnabled = state.subtitlesEnabled,
                 selectedSubtitleKey = state.selectedSubtitleKey,
                 onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
-                onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() },
-                audioDelayMs = audioDelayMs,
-                subtitleDelayMs = subtitleDelayMs,
+                onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() }
             )
 
             if (showSettings && !controlsLocked) {
@@ -792,13 +790,6 @@ private fun VideoControls(
                     IconButton(onClick = onRepeat) {
                         Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White)
                     }
-                    IconButton(onClick = onVolume) {
-                        Icon(
-                            if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
-                            "Volume",
-                            tint = Color.White
-                        )
-                    }
                     IconButton(onClick = onAudioSubtitleMenu) {
                         Icon(
                             Icons.Filled.Audiotrack,
@@ -819,18 +810,11 @@ private fun VideoControls(
                     IconButton(onClick = onLock) {
                         Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White)
                     }
-                }
-
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
                     IconButton(onClick = onFullscreen) {
                         Icon(
                             if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             if (fullscreen) "Exit fullscreen" else "Fullscreen",
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp)
+                            tint = Color.White
                         )
                     }
                 }
