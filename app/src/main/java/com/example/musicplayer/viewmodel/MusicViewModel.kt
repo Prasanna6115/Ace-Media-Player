@@ -14,7 +14,6 @@ import com.example.musicplayer.playback.MusicController
 import com.example.musicplayer.playback.PlaybackUiState
 import com.example.musicplayer.playback.VideoPlaybackController
 import com.example.musicplayer.playback.VideoPlaybackUiState
-import com.example.musicplayer.playback.VideoQuality
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -113,9 +112,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun videoToggleShuffle() = videoController.toggleShuffle()
     fun videoCycleRepeatMode() = videoController.cycleRepeatMode()
     fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
+    fun videoSubtitleOptions() = videoController.subtitleOptions
+    fun videoSelectSubtitle(option: com.example.musicplayer.playback.SubtitleOption?) = videoController.selectSubtitle(option)
     fun pollVideoPosition() = videoController.pollPosition()
     fun videoPlayer() = videoController.player()
-    fun setVideoQuality(quality: VideoQuality) = videoController.setVideoQuality(quality)
 
     fun setDarkTheme(enabled: Boolean) {
         _darkTheme.value = enabled
