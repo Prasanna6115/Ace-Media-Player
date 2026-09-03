@@ -74,6 +74,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     val gestureLongPress: StateFlow<Boolean> = _gestureLongPress.asStateFlow()
     private val _gestureZoom = MutableStateFlow(preferences.getBoolean("gesture_zoom", true))
     val gestureZoom: StateFlow<Boolean> = _gestureZoom.asStateFlow()
+    private val _audioDelayMs = MutableStateFlow(preferences.getInt("video_audio_delay_ms", 0))
+    val audioDelayMs: StateFlow<Int> = _audioDelayMs.asStateFlow()
+    private val _subtitleDelayMs = MutableStateFlow(preferences.getInt("video_subtitle_delay_ms", 0))
+    val subtitleDelayMs: StateFlow<Int> = _subtitleDelayMs.asStateFlow()
 
     init {
         musicController.connect { /* controller ready */ }
@@ -172,6 +176,23 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun setGestureBrightness(enabled: Boolean) { _gestureBrightness.value = enabled; preferences.edit().putBoolean("gesture_brightness", enabled).apply() }
     fun setGestureLongPress(enabled: Boolean) { _gestureLongPress.value = enabled; preferences.edit().putBoolean("gesture_long_press", enabled).apply() }
     fun setGestureZoom(enabled: Boolean) { _gestureZoom.value = enabled; preferences.edit().putBoolean("gesture_zoom", enabled).apply() }
+
+    fun setAudioDelayMs(value: Int) {
+        val safe = value.coerceIn(-2000, 2000)
+        _audioDelayMs.value = safe
+        preferences.edit().putInt("video_audio_delay_ms", safe).apply()
+    }
+
+    fun setSubtitleDelayMs(value: Int) {
+        val safe = value.coerceIn(-2000, 2000)
+        _subtitleDelayMs.value = safe
+        preferences.edit().putInt("video_subtitle_delay_ms", safe).apply()
+    }
+
+    fun resetVideoDelays() {
+        setAudioDelayMs(0)
+        setSubtitleDelayMs(0)
+    }
 
     fun videoPauseForBackground() = videoController.pauseForBackground()
 

@@ -10,6 +10,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Audiotrack
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -129,6 +131,7 @@ private data class GestureOverlayState(
     val icon: ImageVector? = null
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoPlayerScreen(
     viewModel: MusicViewModel,
@@ -146,6 +149,8 @@ fun VideoPlayerScreen(
     val brightnessGestureEnabled by viewModel.gestureBrightness.collectAsState()
     val longPressEnabled by viewModel.gestureLongPress.collectAsState()
     val zoomGestureEnabled by viewModel.gestureZoom.collectAsState()
+    val audioDelayMs by viewModel.audioDelayMs.collectAsState()
+    val subtitleDelayMs by viewModel.subtitleDelayMs.collectAsState()
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val screenWidthPx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
@@ -158,9 +163,10 @@ fun VideoPlayerScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showSubtitleMenu by remember { mutableStateOf(false) }
     var showAudioMenu by remember { mutableStateOf(false) }
+    var showDelayMenu by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var gestureOverlay by remember { mutableStateOf(GestureOverlayState()) }
-    var displayMode by remember { mutableStateOf(DisplayMode.ORIGINAL) }
+    var currentDisplayMode by remember { mutableStateOf(DisplayMode.ORIGINAL) }
     var previewBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var previewPosition by remember { mutableLongStateOf(0L) }
     var previewJob by remember { mutableStateOf<Job?>(null) }
@@ -217,6 +223,7 @@ fun VideoPlayerScreen(
         showSettings = false
         showSubtitleMenu = false
         showAudioMenu = false
+        showDelayMenu = false
         if (controlsLocked) {
             fullscreen = true
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -259,6 +266,7 @@ fun VideoPlayerScreen(
             showSettings = false
             showSubtitleMenu = false
             showAudioMenu = false
+            showDelayMenu = false
         }
     }
 
@@ -271,6 +279,7 @@ fun VideoPlayerScreen(
 
     BackHandler {
         when {
+            showDelayMenu -> showDelayMenu = false
             showAudioMenu -> showAudioMenu = false
             showSubtitleMenu -> showSubtitleMenu = false
             showSettings -> showSettings = false
@@ -286,7 +295,7 @@ fun VideoPlayerScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                val modeRatio = displayMode.ratio
+                val modeRatio = currentDisplayMode.ratio
                 val surfaceModifier = if (modeRatio == null) {
                     Modifier.fillMaxSize()
                 } else {
@@ -308,14 +317,14 @@ fun VideoPlayerScreen(
                             useController = false
                             this.player = player
                             keepScreenOn = keepScreenOn
-                            resizeMode = displayMode.resizeMode
+                            resizeMode = currentDisplayMode.resizeMode
                             setShutterBackgroundColor(android.graphics.Color.BLACK)
                         }
                     },
                     update = {
                         it.player = player
                         it.keepScreenOn = keepScreenOn
-                        it.resizeMode = displayMode.resizeMode
+                        it.resizeMode = currentDisplayMode.resizeMode
                     },
                     modifier = surfaceModifier
                         .graphicsLayer {
@@ -533,7 +542,7 @@ fun VideoPlayerScreen(
                 fullscreen = fullscreen,
                 showSettings = showSettings,
                 onBack = { if (fullscreen) exitFullscreen() else onBack() },
-                onMore = { showSettings = !showSettings; showSubtitleMenu = false; showAudioMenu = false; interactionTick++ },
+                onMore = { showSettings = !showSettings; showSubtitleMenu = false; showAudioMenu = false; showDelayMenu = false; interactionTick++ },
                 onSeek = viewModel::videoSeekTo,
                 onSeekFinished = {
                     draggingSeek = false
@@ -560,13 +569,14 @@ fun VideoPlayerScreen(
                     viewModel.videoSetVolume(if (state.volume > 0f) 0f else 1f)
                     showControls()
                 },
-                onAudioMenu = { showAudioMenu = !showAudioMenu; showSettings = false; showSubtitleMenu = false; interactionTick++ },
-                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; showAudioMenu = false; interactionTick++ },
-                onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; interactionTick++ },
+                onAudioMenu = { showAudioMenu = !showAudioMenu; showSettings = false; showSubtitleMenu = false; showDelayMenu = false; interactionTick++ },
+                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; showAudioMenu = false; showDelayMenu = false; interactionTick++ },
+                onDelayMenu = { showDelayMenu = !showDelayMenu; showSettings = false; showAudioMenu = false; showSubtitleMenu = false; interactionTick++ },
+                onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; showDelayMenu = false; interactionTick++ },
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
-                displayMode = displayMode,
-                onDisplayMode = { displayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
+                currentDisplayMode = currentDisplayMode,
+                onDisplayMode = { currentDisplayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
                 audioTracks = state.audioTracks,
                 selectedAudioKey = state.selectedAudioKey,
                 onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showControls() },
@@ -579,9 +589,9 @@ fun VideoPlayerScreen(
 
             if (showSettings && !controlsLocked) {
                 VideoSettingsMenu(
-                    displayMode = displayMode,
+                    currentDisplayMode = currentDisplayMode,
                     zoomScale = zoomScale,
-                    onDisplayMode = { displayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
+                    onDisplayMode = { currentDisplayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
                     onResetZoom = { zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showControls() },
                     onClose = { showSettings = false }
                 )
@@ -604,6 +614,17 @@ fun VideoPlayerScreen(
                     selectedAudioKey = state.selectedAudioKey,
                     onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showControls() },
                     onClose = { showAudioMenu = false }
+                )
+            }
+
+            if (showDelayMenu && !controlsLocked) {
+                DelaySyncMenu(
+                    audioDelayMs = audioDelayMs,
+                    subtitleDelayMs = subtitleDelayMs,
+                    onAudioDelayChange = viewModel::setAudioDelayMs,
+                    onSubtitleDelayChange = viewModel::setSubtitleDelayMs,
+                    onReset = viewModel::resetVideoDelays,
+                    onClose = { showDelayMenu = false }
                 )
             }
         }
@@ -678,6 +699,7 @@ private fun VideoControls(
     onVolume: () -> Unit,
     onAudioMenu: () -> Unit,
     onSubtitleMenu: () -> Unit,
+    onDelayMenu: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
     onFullscreen: () -> Unit,
@@ -689,6 +711,8 @@ private fun VideoControls(
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
+    audioDelayMs: Int,
+    subtitleDelayMs: Int,
     onSubtitlesEnabled: (Boolean) -> Unit,
     onSelectSubtitle: (SubtitleTrack?) -> Unit
 ) {
@@ -776,6 +800,9 @@ private fun VideoControls(
                     IconButton(onClick = onSubtitleMenu) {
                         Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White)
                     }
+                    IconButton(onClick = onDelayMenu) {
+                        Icon(Icons.Filled.Tune, "Audio and subtitle delay", tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFFFFB000) else Color.White)
+                    }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, "Video settings", tint = Color.White)
                     }
@@ -825,10 +852,77 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
 }
 
 @Composable
+private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
+    audioDelayMs: Int,
+    subtitleDelayMs: Int,
+    onAudioDelayChange: (Int) -> Unit,
+    onSubtitleDelayChange: (Int) -> Unit,
+    onReset: () -> Unit,
+    onClose: () -> Unit
+) {
+    Card(
+        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 18.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
+    ) {
+        Column(
+            Modifier.width(300.dp).verticalScroll(rememberScrollState()).padding(bottom = 6.dp)
+        ) {
+            Text("Audio Delay / Subtitle Delay", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            Text("Fine-tune sync in 50 ms steps", color = Color.LightGray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 14.dp))
+
+            DelayRow("Audio Delay", audioDelayMs, onAudioDelayChange)
+            DelayRow("Subtitle Delay", subtitleDelayMs, onSubtitleDelayChange)
+
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(onClick = onReset) {
+                    Text("Reset", color = Color(0xFFFFB000))
+                }
+                TextButton(onClick = onClose) {
+                    Text("Close", color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DelayRow(
+    label: String,
+    valueMs: Int,
+    onValueChange: (Int) -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, color = Color.White, modifier = Modifier.weight(1f))
+            Text(formatDelayMs(valueMs), color = Color(0xFFFFB000), style = MaterialTheme.typography.labelLarge)
+        }
+        Slider(
+            value = valueMs.toFloat(),
+            onValueChange = { onValueChange((it / 50f).roundToInt() * 50) },
+            valueRange = -2000f..2000f,
+            steps = 79,
+            colors = SliderDefaults.colors(thumbColor = Color(0xFFFF6A00), activeTrackColor = Color(0xFFFF6A00))
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = { onValueChange((valueMs - 50).coerceAtLeast(-2000)) }) { Text("−50 ms", color = Color.White) }
+            TextButton(onClick = { onValueChange(0) }) { Text("0", color = Color.LightGray) }
+            TextButton(onClick = { onValueChange((valueMs + 50).coerceAtMost(2000)) }) { Text("+50 ms", color = Color.White) }
+        }
+    }
+}
+
+private fun formatDelayMs(value: Int): String = if (value == 0) "0 ms" else if (value > 0) "+${value} ms" else "${value} ms"
+
+@Composable
 private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
+    audioDelayMs: Int,
+    subtitleDelayMs: Int,
     onSubtitlesEnabled: (Boolean) -> Unit,
     onSelectSubtitle: (SubtitleTrack?) -> Unit,
     onClose: () -> Unit
