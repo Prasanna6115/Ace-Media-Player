@@ -316,14 +316,14 @@ fun VideoPlayerScreen(
                         PlayerView(ctx).apply {
                             useController = false
                             this.player = player
-                            this.keepScreenOn = keepScreenOn
+                            setKeepScreenOn(keepScreenOn)
                             resizeMode = currentDisplayMode.resizeMode
                             setShutterBackgroundColor(android.graphics.Color.BLACK)
                         }
                     },
                     update = {
                         it.player = player
-                        it.keepScreenOn = keepScreenOn
+                        it.setKeepScreenOn(keepScreenOn)
                         it.resizeMode = currentDisplayMode.resizeMode
                     },
                     modifier = surfaceModifier
@@ -569,15 +569,19 @@ fun VideoPlayerScreen(
                     viewModel.videoSetVolume(if (state.volume > 0f) 0f else 1f)
                     showControls()
                 },
-                onAudioMenu = { showAudioMenu = !showAudioMenu; showSettings = false; showSubtitleMenu = false; showDelayMenu = false; interactionTick++ },
-                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; showAudioMenu = false; showDelayMenu = false; interactionTick++ },
+                onAudioSubtitleMenu = {
+                    val next = !(showAudioMenu || showSubtitleMenu)
+                    showAudioMenu = next
+                    showSubtitleMenu = false
+                    showSettings = false
+                    showDelayMenu = false
+                    interactionTick++
+                },
                 onDelayMenu = { showDelayMenu = !showDelayMenu; showSettings = false; showAudioMenu = false; showSubtitleMenu = false; interactionTick++ },
-                audioDelayMs = audioDelayMs,
-                subtitleDelayMs = subtitleDelayMs,
                 onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; showDelayMenu = false; interactionTick++ },
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
-                currentDisplayMode = currentDisplayMode,
+                displayMode = currentDisplayMode,
                 onDisplayMode = { currentDisplayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
                 audioTracks = state.audioTracks,
                 selectedAudioKey = state.selectedAudioKey,
@@ -591,7 +595,7 @@ fun VideoPlayerScreen(
 
             if (showSettings && !controlsLocked) {
                 VideoSettingsMenu(
-                    currentDisplayMode = currentDisplayMode,
+                    displayMode = currentDisplayMode,
                     zoomScale = zoomScale,
                     onDisplayMode = { currentDisplayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
                     onResetZoom = { zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showControls() },
@@ -599,23 +603,17 @@ fun VideoPlayerScreen(
                 )
             }
 
-            if (showSubtitleMenu && !controlsLocked) {
-                SubtitleMenu(
+            if ((showAudioMenu || showSubtitleMenu) && !controlsLocked) {
+                AudioSubtitleMenu(
+                    audioTracks = state.audioTracks,
+                    selectedAudioKey = state.selectedAudioKey,
+                    onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showSubtitleMenu = false; showControls() },
                     subtitles = state.subtitleTracks,
                     subtitlesEnabled = state.subtitlesEnabled,
                     selectedSubtitleKey = state.selectedSubtitleKey,
                     onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
-                    onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() },
-                    onClose = { showSubtitleMenu = false }
-                )
-            }
-
-            if (showAudioMenu && !controlsLocked) {
-                AudioMenu(
-                    audioTracks = state.audioTracks,
-                    selectedAudioKey = state.selectedAudioKey,
-                    onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showControls() },
-                    onClose = { showAudioMenu = false }
+                    onSelectSubtitle = { viewModel.selectSubtitle(it); showAudioMenu = false; showSubtitleMenu = false; showControls() },
+                    onClose = { showAudioMenu = false; showSubtitleMenu = false }
                 )
             }
 
@@ -699,15 +697,12 @@ private fun VideoControls(
     onShuffle: () -> Unit,
     onRepeat: () -> Unit,
     onVolume: () -> Unit,
-    onAudioMenu: () -> Unit,
-    audioDelayMs: Int,
-    subtitleDelayMs: Int,
-    onSubtitleMenu: () -> Unit,
+    onAudioSubtitleMenu: () -> Unit,
     onDelayMenu: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
     onFullscreen: () -> Unit,
-    currentDisplayMode: DisplayMode,
+    displayMode: DisplayMode,
     onDisplayMode: (DisplayMode) -> Unit,
     audioTracks: List<AudioTrack>,
     selectedAudioKey: String?,
@@ -715,6 +710,8 @@ private fun VideoControls(
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
+    audioDelayMs: Int,
+    subtitleDelayMs: Int,
     onSubtitlesEnabled: (Boolean) -> Unit,
     onSelectSubtitle: (SubtitleTrack?) -> Unit
 ) {
@@ -784,7 +781,7 @@ private fun VideoControls(
                 }
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onShuffle) {
@@ -794,16 +791,25 @@ private fun VideoControls(
                         Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White)
                     }
                     IconButton(onClick = onVolume) {
-                        Icon(if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff, "Volume", tint = Color.White)
+                        Icon(
+                            if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
+                            "Volume",
+                            tint = Color.White
+                        )
                     }
-                    IconButton(onClick = onAudioMenu) {
-                        Icon(Icons.Filled.Audiotrack, "Audio tracks", tint = if (audioTracks.size > 1) Color(0xFFFFB000) else Color.White)
-                    }
-                    IconButton(onClick = onSubtitleMenu) {
-                        Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White)
+                    IconButton(onClick = onAudioSubtitleMenu) {
+                        Icon(
+                            Icons.Filled.Audiotrack,
+                            "Audio & Subtitles",
+                            tint = if (audioTracks.size > 1 || subtitles.isNotEmpty() || subtitlesEnabled) Color(0xFFFFB000) else Color.White
+                        )
                     }
                     IconButton(onClick = onDelayMenu) {
-                        Icon(Icons.Filled.Tune, "Audio and subtitle delay", tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFFFFB000) else Color.White)
+                        Icon(
+                            Icons.Filled.Tune,
+                            "Audio and subtitle delay",
+                            tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFFFFB000) else Color.White
+                        )
                     }
                     IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, "Video settings", tint = Color.White)
@@ -811,8 +817,19 @@ private fun VideoControls(
                     IconButton(onClick = onLock) {
                         Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White)
                     }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
                     IconButton(onClick = onFullscreen) {
-                        Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Fullscreen", tint = Color.White)
+                        Icon(
+                            if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                            if (fullscreen) "Exit fullscreen" else "Fullscreen",
+                            tint = Color.White,
+                            modifier = Modifier.size(30.dp)
+                        )
                     }
                 }
             }
@@ -822,7 +839,7 @@ private fun VideoControls(
 
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
-    currentDisplayMode: DisplayMode,
+    displayMode: DisplayMode,
     zoomScale: Float,
     onDisplayMode: (DisplayMode) -> Unit,
     onResetZoom: () -> Unit,
@@ -839,7 +856,7 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
             ) {
                 items(DisplayMode.values().toList()) { mode ->
                     DropdownMenuItem(
-                        text = { Text(if (mode == currentDisplayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
+                        text = { Text(if (mode == displayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
                         onClick = { onDisplayMode(mode) }
                     )
                 }
@@ -919,7 +936,10 @@ private fun DelayRow(
 private fun formatDelayMs(value: Int): String = if (value == 0) "0 ms" else if (value > 0) "+${value} ms" else "${value} ms"
 
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
+private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
+    audioTracks: List<AudioTrack>,
+    selectedAudioKey: String?,
+    onSelectAudio: (AudioTrack?) -> Unit,
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
@@ -928,72 +948,97 @@ private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
     onClose: () -> Unit
 ) {
     Card(
-        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 72.dp),
+        Modifier
+            .align(Alignment.TopEnd)
+            .padding(top = 58.dp, end = 18.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
-        Column(Modifier.width(250.dp)) {
-            Text("Subtitles", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
-                    Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
-                }
-            }
-            if (subtitles.isEmpty()) {
-                Text("No subtitles available", color = Color.LightGray, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
-            } else {
-                LazyColumn(Modifier.heightIn(max = 300.dp)) {
-                    item {
-                        DropdownMenuItem(
-                            text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) },
-                            onClick = { onSelectSubtitle(null) }
-                        )
-                    }
-                    items(subtitles) { track ->
-                        DropdownMenuItem(
-                            text = { Text(if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label, color = Color.White) },
-                            onClick = { onSelectSubtitle(track) }
-                        )
-                    }
-                }
-            }
-            DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
-        }
-    }
-}
+        Column(Modifier.width(300.dp)) {
+            Text(
+                "Audio & Subtitles",
+                color = Color(0xFFFFB000),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.titleMedium
+            )
 
-@Composable
-private fun androidx.compose.foundation.layout.BoxScope.AudioMenu(
-    audioTracks: List<AudioTrack>,
-    selectedAudioKey: String?,
-    onSelectAudio: (AudioTrack?) -> Unit,
-    onClose: () -> Unit
-) {
-    Card(
-        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 124.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
-    ) {
-        Column(Modifier.width(250.dp)) {
-            Text("Audio Track", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-            if (audioTracks.isEmpty()) {
-                Text("Default audio", color = Color.LightGray, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-            } else {
-                LazyColumn(Modifier.heightIn(max = 300.dp)) {
-                    item {
+            LazyColumn(Modifier.heightIn(max = 430.dp)) {
+                item {
+                    Text(
+                        "Audio Track",
+                        color = Color(0xFFFFB000),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    )
+                    if (audioTracks.isEmpty()) {
+                        Text(
+                            "Default audio",
+                            color = Color.LightGray,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    } else {
                         DropdownMenuItem(
                             text = { Text(if (selectedAudioKey == null) "✓ Auto" else "Auto", color = Color.White) },
                             onClick = { onSelectAudio(null) }
                         )
                     }
-                    items(audioTracks) { track ->
-                        DropdownMenuItem(
-                            text = { Text(if (track.key == selectedAudioKey) "✓ ${track.label}" else track.label, color = Color.White) },
-                            onClick = { onSelectAudio(track) }
-                        )
+                }
+
+                items(audioTracks) { track ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (track.key == selectedAudioKey) "✓ ${track.label}" else track.label,
+                                color = Color.White
+                            )
+                        },
+                        onClick = { onSelectAudio(track) }
+                    )
+                }
+
+                item {
+                    Text(
+                        "Subtitles",
+                        color = Color(0xFFFFB000),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
+                            Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
+                        }
                     }
+
+                    DropdownMenuItem(
+                        text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) },
+                        onClick = { onSelectSubtitle(null) }
+                    )
+                }
+
+                items(subtitles) { track ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label,
+                                color = Color.White
+                            )
+                        },
+                        onClick = { onSelectSubtitle(track) }
+                    )
                 }
             }
-            DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
+
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Close", color = Color.White)
+            }
         }
     }
 }
