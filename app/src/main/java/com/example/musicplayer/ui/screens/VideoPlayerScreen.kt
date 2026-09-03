@@ -316,7 +316,7 @@ fun VideoPlayerScreen(
                         PlayerView(ctx).apply {
                             useController = false
                             this.player = player
-                            keepScreenOn = keepScreenOn
+                            this.keepScreenOn = keepScreenOn
                             resizeMode = currentDisplayMode.resizeMode
                             setShutterBackgroundColor(android.graphics.Color.BLACK)
                         }
@@ -703,7 +703,7 @@ private fun VideoControls(
     onSettings: () -> Unit,
     onLock: () -> Unit,
     onFullscreen: () -> Unit,
-    displayMode: DisplayMode,
+    currentDisplayMode: DisplayMode,
     onDisplayMode: (DisplayMode) -> Unit,
     audioTracks: List<AudioTrack>,
     selectedAudioKey: String?,
@@ -711,8 +711,6 @@ private fun VideoControls(
     subtitles: List<SubtitleTrack>,
     subtitlesEnabled: Boolean,
     selectedSubtitleKey: String?,
-    audioDelayMs: Int,
-    subtitleDelayMs: Int,
     onSubtitlesEnabled: (Boolean) -> Unit,
     onSelectSubtitle: (SubtitleTrack?) -> Unit
 ) {
@@ -820,7 +818,7 @@ private fun VideoControls(
 
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
-    displayMode: DisplayMode,
+    currentDisplayMode: DisplayMode,
     zoomScale: Float,
     onDisplayMode: (DisplayMode) -> Unit,
     onResetZoom: () -> Unit,
@@ -837,7 +835,7 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
             ) {
                 items(DisplayMode.values().toList()) { mode ->
                     DropdownMenuItem(
-                        text = { Text(if (mode == displayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
+                        text = { Text(if (mode == currentDisplayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
                         onClick = { onDisplayMode(mode) }
                     )
                 }
