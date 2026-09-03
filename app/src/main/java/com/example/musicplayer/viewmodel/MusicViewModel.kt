@@ -112,10 +112,10 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun videoToggleShuffle() = videoController.toggleShuffle()
     fun videoCycleRepeatMode() = videoController.cycleRepeatMode()
     fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
-    fun videoSubtitleOptions() = videoController.subtitleOptions
-    fun videoSelectSubtitle(option: com.example.musicplayer.playback.SubtitleOption?) = videoController.selectSubtitle(option)
     fun pollVideoPosition() = videoController.pollPosition()
     fun videoPlayer() = videoController.player()
+    fun setSubtitlesEnabled(enabled: Boolean) = videoController.setSubtitlesEnabled(enabled)
+    fun selectSubtitle(track: com.example.musicplayer.playback.SubtitleTrack?) = videoController.selectSubtitle(track)
 
     fun setDarkTheme(enabled: Boolean) {
         _darkTheme.value = enabled
