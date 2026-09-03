@@ -591,6 +591,8 @@ fun VideoPlayerScreen(
                 selectedSubtitleKey = state.selectedSubtitleKey,
                 onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
                 onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() }
+                audioDelayMs = audioDelayMs,
+                subtitleDelayMs = subtitleDelayMs,
             )
 
             if (showSettings && !controlsLocked) {
