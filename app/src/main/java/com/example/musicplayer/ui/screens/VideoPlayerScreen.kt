@@ -590,7 +590,7 @@ fun VideoPlayerScreen(
                 subtitlesEnabled = state.subtitlesEnabled,
                 selectedSubtitleKey = state.selectedSubtitleKey,
                 onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
-                onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() }
+                onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() },
                 audioDelayMs = audioDelayMs,
                 subtitleDelayMs = subtitleDelayMs,
             )
