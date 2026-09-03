@@ -279,34 +279,32 @@ fun VideoPlayerScreen(
                     .pointerInput(controlsLocked) {
                         awaitEachGesture {
                             var multiTouchStarted = false
-                            awaitPointerEventScope {
-                                while (true) {
-                                    val event = awaitPointerEvent()
-                                    val pressedCount = event.changes.count { it.pressed }
-                                    if (pressedCount >= 2) {
-                                        val zoom = event.calculateZoom()
-                                        val pan = event.calculatePan()
-                                        if (zoom != 1f || pan != Offset.Zero) {
-                                            if (!controlsLocked) {
-                                                val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
-                                                zoomScale = nextScale
-                                                val maxX = (size.width * (nextScale - 1f) / 2f).coerceAtLeast(0f)
-                                                val maxY = (size.height * (nextScale - 1f) / 2f).coerceAtLeast(0f)
-                                                zoomPanX = (zoomPanX + pan.x).coerceIn(-maxX, maxX)
-                                                zoomPanY = (zoomPanY + pan.y).coerceIn(-maxY, maxY)
-                                                controlsVisible = false
-                                                multiTouchStarted = true
-                                                gestureOverlay = GestureOverlayState(
-                                                    kind = GestureKind.TAP,
-                                                    value = if (nextScale <= 1.01f) "Zoom 1.0×" else "Zoom ${"%.1f".format(nextScale)}×",
-                                                    icon = Icons.Filled.Fullscreen
-                                                )
-                                            }
-                                            event.changes.forEach { it.consume() }
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val pressedCount = event.changes.count { it.pressed }
+                                if (pressedCount >= 2) {
+                                    val zoom = event.calculateZoom()
+                                    val pan = event.calculatePan()
+                                    if (zoom != 1f || pan != Offset.Zero) {
+                                        if (!controlsLocked) {
+                                            val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
+                                            zoomScale = nextScale
+                                            val maxX = (size.width * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                                            val maxY = (size.height * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                                            zoomPanX = (zoomPanX + pan.x).coerceIn(-maxX, maxX)
+                                            zoomPanY = (zoomPanY + pan.y).coerceIn(-maxY, maxY)
+                                            controlsVisible = false
+                                            multiTouchStarted = true
+                                            gestureOverlay = GestureOverlayState(
+                                                kind = GestureKind.TAP,
+                                                value = if (nextScale <= 1.01f) "Zoom 1.0×" else "Zoom ${"%.1f".format(nextScale)}×",
+                                                icon = Icons.Filled.Fullscreen
+                                            )
                                         }
-                                    } else if (multiTouchStarted || pressedCount == 0) {
-                                        break
+                                        event.changes.forEach { it.consume() }
                                     }
+                                } else if (multiTouchStarted || pressedCount == 0) {
+                                    break
                                 }
                             }
                         }
