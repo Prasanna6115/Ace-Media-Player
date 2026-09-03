@@ -72,7 +72,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
@@ -122,6 +121,7 @@ fun VideoPlayerScreen(
     var controlsLocked by remember { mutableStateOf(false) }
     var showUnlockPrompt by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showSubtitleMenu by remember { mutableStateOf(false) }
     var interactionTick by remember { mutableIntStateOf(0) }
     var gestureOverlay by remember { mutableStateOf(GestureOverlayState()) }
     var displayMode by remember { mutableStateOf(DisplayMode.FIT) }
@@ -172,6 +172,7 @@ fun VideoPlayerScreen(
     fun toggleLock() {
         controlsLocked = !controlsLocked
         showSettings = false
+        showSubtitleMenu = false
         if (controlsLocked) {
             fullscreen = true
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -207,6 +208,7 @@ fun VideoPlayerScreen(
             delay(3500)
             controlsVisible = false
             showSettings = false
+            showSubtitleMenu = false
         }
     }
 
@@ -219,6 +221,7 @@ fun VideoPlayerScreen(
 
     BackHandler {
         when {
+            showSubtitleMenu -> showSubtitleMenu = false
             showSettings -> showSettings = false
             fullscreen -> exitFullscreen()
             else -> onBack()
@@ -249,14 +252,22 @@ fun VideoPlayerScreen(
             val latestActivity by androidx.compose.runtime.rememberUpdatedState(activity)
 
             // Gesture layer: horizontal drag = seek; left vertical = brightness; right vertical = volume.
-            // These gestures deliberately hide the normal controls while the gesture overlay is shown at the top.
+            // Tap and drag handlers are on the same layer so neither blocks the other.
             Box(
                 Modifier
                     .fillMaxSize()
                     .padding(top = 64.dp, bottom = 118.dp)
                     .pointerInput(Unit) {
+                        var dragVolumeBase = 1f
+                        var dragBrightnessBase = 0.5f
+                        var dragVerticalDelta = 0f
                         detectDragGestures(
-                            onDragStart = { },
+                            onDragStart = {
+                                dragVolumeBase = latestState.volume
+                                dragVerticalDelta = 0f
+                                val window = latestActivity?.window
+                                dragBrightnessBase = window?.attributes?.screenBrightness?.takeIf { it >= 0f } ?: 0.5f
+                            },
                             onDragCancel = { gestureOverlay = GestureOverlayState(); controlsVisible = false },
                             onDragEnd = {
                                 interactionTick++
@@ -266,7 +277,7 @@ fun VideoPlayerScreen(
                                 }
                             },
                             onDrag = { change, dragAmount ->
-                                change.consume()
+                                dragVerticalDelta += dragAmount.y
                                 val w = size.width.toFloat().coerceAtLeast(1f)
                                 val h = size.height.toFloat().coerceAtLeast(1f)
                                 val x = change.position.x
@@ -284,8 +295,7 @@ fun VideoPlayerScreen(
                                 } else if (x < w * 0.45f) {
                                     val window = latestActivity?.window
                                     if (window != null) {
-                                        val current = window.attributes.screenBrightness.takeIf { it >= 0f } ?: 0.5f
-                                        val next = (current - dragAmount.y / h * 1.25f).coerceIn(0.05f, 1f)
+                                        val next = (dragBrightnessBase - dragVerticalDelta / h * 1.25f).coerceIn(0.05f, 1f)
                                         val params = window.attributes
                                         params.screenBrightness = next
                                         window.attributes = params
@@ -296,7 +306,7 @@ fun VideoPlayerScreen(
                                         )
                                     }
                                 } else if (x > w * 0.55f) {
-                                    val next = (latestState.volume - dragAmount.y / h * 1.25f).coerceIn(0f, 1f)
+                                    val next = (dragVolumeBase - dragVerticalDelta / h * 1.25f).coerceIn(0f, 1f)
                                     viewModel.videoSetVolume(next)
                                     gestureOverlay = GestureOverlayState(
                                         kind = GestureKind.VOLUME,
@@ -308,13 +318,6 @@ fun VideoPlayerScreen(
                             }
                         )
                     }
-            )
-
-            // Tap layer is separate so gesture drags never make the control UI pop up.
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(top = 64.dp, bottom = 118.dp)
                     .pointerInput(controlsLocked) {
                         detectTapGestures(
                             onDoubleTap = { offset ->
@@ -365,7 +368,7 @@ fun VideoPlayerScreen(
         }
 
         if (gestureOverlay.kind != GestureKind.NONE && !controlsLocked) {
-            LaunchedEffect(gestureOverlay.kind, gestureOverlay.value, gestureOverlay.positionMs) {
+            LaunchedEffect(gestureOverlay.kind, gestureOverlay.value) {
                 delay(650)
                 gestureOverlay = GestureOverlayState()
             }
@@ -426,7 +429,8 @@ fun VideoPlayerScreen(
                     viewModel.videoSetVolume(if (state.volume > 0f) 0f else 1f)
                     showControls()
                 },
-                onSettings = { showSettings = !showSettings; interactionTick++ },
+                onSettings = { showSettings = !showSettings; showSubtitleMenu = false; interactionTick++ },
+                onSubtitleMenu = { showSubtitleMenu = !showSubtitleMenu; showSettings = false; interactionTick++ },
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
                 displayMode = displayMode,
@@ -435,8 +439,19 @@ fun VideoPlayerScreen(
                 subtitlesEnabled = state.subtitlesEnabled,
                 selectedSubtitleKey = state.selectedSubtitleKey,
                 onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
-                onSelectSubtitle = { viewModel.selectSubtitle(it); showSettings = false; showControls() }
+                onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() }
             )
+
+            if (showSubtitleMenu && !controlsLocked) {
+                SubtitleMenu(
+                    subtitles = state.subtitleTracks,
+                    subtitlesEnabled = state.subtitlesEnabled,
+                    selectedSubtitleKey = state.selectedSubtitleKey,
+                    onSubtitlesEnabled = { viewModel.setSubtitlesEnabled(it); interactionTick++ },
+                    onSelectSubtitle = { viewModel.selectSubtitle(it); showSubtitleMenu = false; showControls() },
+                    onClose = { showSubtitleMenu = false }
+                )
+            }
         }
 
         if (state.errorMessage != null) {
@@ -510,6 +525,7 @@ private fun VideoControls(
     onRepeat: () -> Unit,
     onVolume: () -> Unit,
     onSettings: () -> Unit,
+    onSubtitleMenu: () -> Unit,
     onLock: () -> Unit,
     onFullscreen: () -> Unit,
     displayMode: DisplayMode,
@@ -571,7 +587,7 @@ private fun VideoControls(
                     IconButton(onClick = onShuffle) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFFFF6A00) else Color.White) }
                     IconButton(onClick = onRepeat) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White) }
                     IconButton(onClick = onVolume) { Icon(if (state.volume > 0f) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff, "Volume", tint = Color.White) }
-                    IconButton(onClick = onSettings) { Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White) }
+                    IconButton(onClick = onSubtitleMenu) { Icon(Icons.Filled.Subtitles, "Subtitles", tint = if (subtitlesEnabled) Color(0xFFFFB000) else Color.White) }
                     IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "Video settings", tint = Color.White) }
                     IconButton(onClick = onLock) { Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White) }
                     IconButton(onClick = onFullscreen) { Icon(if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen, "Fullscreen", tint = Color.White) }
@@ -617,10 +633,27 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
                     onClick = { onDisplayMode(mode) }
                 )
             }
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = Color.White.copy(alpha = 0.14f))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Subtitles, null, tint = Color.White, modifier = Modifier.size(22.dp))
-                Spacer(Modifier.width(10.dp))
+            DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.SubtitleMenu(
+    subtitles: List<SubtitleTrack>,
+    subtitlesEnabled: Boolean,
+    selectedSubtitleKey: String?,
+    onSubtitlesEnabled: (Boolean) -> Unit,
+    onSelectSubtitle: (SubtitleTrack?) -> Unit,
+    onClose: () -> Unit
+) {
+    Card(
+        Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 96.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
+    ) {
+        Column(Modifier.padding(vertical = 6.dp)) {
+            Text("Subtitles", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
                 TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
                     Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
@@ -629,10 +662,7 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
             if (subtitles.isEmpty()) {
                 Text("No subtitles available", color = Color.LightGray, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
             } else {
-                DropdownMenuItem(
-                    text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) },
-                    onClick = { onSelectSubtitle(null) }
-                )
+                DropdownMenuItem(text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) }, onClick = { onSelectSubtitle(null) })
                 subtitles.forEach { track ->
                     DropdownMenuItem(
                         text = { Text(if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label, color = Color.White) },
