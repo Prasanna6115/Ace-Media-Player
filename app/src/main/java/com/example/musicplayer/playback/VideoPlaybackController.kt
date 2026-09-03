@@ -119,6 +119,10 @@ class VideoPlaybackController(private val context: Context) {
         controller?.let { if (it.isPlaying) it.pause() else it.play() }
     }
 
+    fun playPauseIfPlaying() {
+        controller?.takeIf { it.isPlaying }?.pause()
+    }
+
     fun next() = controller?.seekToNextMediaItem()
 
     fun previous() = controller?.seekToPreviousMediaItem()

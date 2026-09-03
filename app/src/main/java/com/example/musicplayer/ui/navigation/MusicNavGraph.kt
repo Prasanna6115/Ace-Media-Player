@@ -153,7 +153,10 @@ fun MusicNavGraph(viewModel: MusicViewModel) {
                 VideoPlayerScreen(
                     viewModel = viewModel,
                     videoId = videoId,
-                    onBack = { navController.popBackStack() }
+                    onBack = {
+                        viewModel.closeVideoAndRestoreAudio()
+                        navController.popBackStack()
+                    }
                 )
             }
         }

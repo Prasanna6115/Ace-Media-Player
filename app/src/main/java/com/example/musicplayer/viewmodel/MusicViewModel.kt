@@ -50,6 +50,8 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     val playbackState: StateFlow<PlaybackUiState> = musicController.state
     val videoPlaybackState: StateFlow<VideoPlaybackUiState> = videoController.state
 
+    private var audioSnapshot: MusicController.PlaybackSnapshot? = null
+
     private val preferences = app.getSharedPreferences("ace_settings", android.content.Context.MODE_PRIVATE)
     private val _darkTheme = MutableStateFlow(preferences.getBoolean("dark_theme", true))
     val darkTheme: StateFlow<Boolean> = _darkTheme.asStateFlow()
@@ -104,7 +106,17 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun pollPosition() = musicController.pollPosition()
 
     // ---- Video Playback ----
-    fun playVideo(video: Video) = videoController.playVideo(video, allVideos.value)
+    fun playVideo(video: Video) {
+        if (audioSnapshot == null) audioSnapshot = musicController.snapshot()
+        videoController.playVideo(video, allVideos.value)
+    }
+
+    fun closeVideoAndRestoreAudio() {
+        videoController.playPauseIfPlaying()
+        val snapshot = audioSnapshot
+        audioSnapshot = null
+        if (snapshot != null) musicController.restore(snapshot)
+    }
     fun videoPlayPause() = videoController.playPause()
     fun videoNext() = videoController.next()
     fun videoPrevious() = videoController.previous()

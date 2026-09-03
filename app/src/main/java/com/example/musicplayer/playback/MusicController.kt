@@ -82,6 +82,65 @@ class MusicController(private val context: Context) {
         )
     }
 
+
+    data class PlaybackSnapshot(
+        val songs: List<Song>,
+        val index: Int,
+        val positionMs: Long,
+        val isPlaying: Boolean,
+        val shuffleEnabled: Boolean,
+        val repeatMode: Int,
+        val volume: Float
+    )
+
+    fun snapshot(): PlaybackSnapshot? {
+        val c = controller ?: return null
+        val song = _state.value.currentSong ?: return null
+        if (queue.isEmpty()) return null
+        return PlaybackSnapshot(
+            songs = queue.toList(),
+            index = queue.indexOfFirst { it.id == song.id }.coerceAtLeast(0),
+            positionMs = c.currentPosition.coerceAtLeast(0L),
+            isPlaying = c.isPlaying,
+            shuffleEnabled = c.shuffleModeEnabled,
+            repeatMode = c.repeatMode,
+            volume = c.volume
+        )
+    }
+
+    fun restore(snapshot: PlaybackSnapshot) {
+        val c = controller ?: return
+        if (snapshot.songs.isEmpty()) return
+        val items = snapshot.songs.map { song ->
+            MediaItem.Builder()
+                .setMediaId(song.id.toString())
+                .setUri(song.uriString)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(song.title)
+                        .setArtist(song.artist)
+                        .setAlbumTitle(song.album)
+                        .build()
+                )
+                .build()
+        }
+        queue = snapshot.songs
+        c.setMediaItems(items, snapshot.index.coerceIn(0, items.lastIndex), snapshot.positionMs)
+        c.shuffleModeEnabled = snapshot.shuffleEnabled
+        c.repeatMode = snapshot.repeatMode
+        c.volume = snapshot.volume
+        c.prepare()
+        if (snapshot.isPlaying) c.play() else c.pause()
+        _state.value = _state.value.copy(
+            currentSong = snapshot.songs.getOrNull(snapshot.index),
+            positionMs = snapshot.positionMs,
+            isPlaying = snapshot.isPlaying,
+            shuffleEnabled = snapshot.shuffleEnabled,
+            repeatMode = snapshot.repeatMode,
+            volume = snapshot.volume
+        )
+    }
+
     fun playQueue(songs: List<Song>, startIndex: Int) {
         queue = songs
         val items = songs.map { song ->

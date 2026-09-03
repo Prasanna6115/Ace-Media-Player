@@ -12,6 +12,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Brightness6
@@ -67,9 +71,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -129,6 +137,9 @@ fun VideoPlayerScreen(
     var previewPosition by remember { mutableLongStateOf(0L) }
     var previewJob by remember { mutableStateOf<Job?>(null) }
     var draggingSeek by remember { mutableStateOf(false) }
+    var zoomScale by remember { mutableStateOf(1f) }
+    var zoomPanX by remember { mutableStateOf(0f) }
+    var zoomPanY by remember { mutableStateOf(0f) }
 
     val selectedVideo = videos.firstOrNull { it.id == videoId } ?: state.currentVideo
 
@@ -245,7 +256,15 @@ fun VideoPlayerScreen(
                     it.player = player
                     it.resizeMode = displayMode.resizeMode
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = zoomScale
+                        scaleY = zoomScale
+                        translationX = zoomPanX
+                        translationY = zoomPanY
+                        clip = true
+                    }
             )
 
             val latestState by androidx.compose.runtime.rememberUpdatedState(state)
@@ -257,6 +276,41 @@ fun VideoPlayerScreen(
                 Modifier
                     .fillMaxSize()
                     .padding(top = 64.dp, bottom = 118.dp)
+                    .pointerInput(controlsLocked) {
+                        awaitEachGesture {
+                            var multiTouchStarted = false
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pressedCount = event.changes.count { it.pressed }
+                                    if (pressedCount >= 2) {
+                                        val zoom = event.calculateZoom()
+                                        val pan = event.calculatePan()
+                                        if (zoom != 1f || pan != Offset.Zero) {
+                                            if (!controlsLocked) {
+                                                val nextScale = (zoomScale * zoom).coerceIn(1f, 4f)
+                                                zoomScale = nextScale
+                                                val maxX = (size.width * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                                                val maxY = (size.height * (nextScale - 1f) / 2f).coerceAtLeast(0f)
+                                                zoomPanX = (zoomPanX + pan.x).coerceIn(-maxX, maxX)
+                                                zoomPanY = (zoomPanY + pan.y).coerceIn(-maxY, maxY)
+                                                controlsVisible = false
+                                                multiTouchStarted = true
+                                                gestureOverlay = GestureOverlayState(
+                                                    kind = GestureKind.TAP,
+                                                    value = if (nextScale <= 1.01f) "Zoom 1.0×" else "Zoom ${"%.1f".format(nextScale)}×",
+                                                    icon = Icons.Filled.Fullscreen
+                                                )
+                                            }
+                                            event.changes.forEach { it.consume() }
+                                        }
+                                    } else if (multiTouchStarted || pressedCount == 0) {
+                                        break
+                                    }
+                                }
+                            }
+                        }
+                    }
                     .pointerInput(Unit) {
                         var dragVolumeBase = 1f
                         var dragBrightnessBase = 0.5f
@@ -434,7 +488,7 @@ fun VideoPlayerScreen(
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
                 displayMode = displayMode,
-                onDisplayMode = { displayMode = it; showSettings = false; showControls() },
+                onDisplayMode = { displayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
                 subtitles = state.subtitleTracks,
                 subtitlesEnabled = state.subtitlesEnabled,
                 selectedSubtitleKey = state.selectedSubtitleKey,
@@ -625,7 +679,12 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
         Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
-        Column(Modifier.padding(vertical = 6.dp)) {
+        Column(
+            Modifier
+                .heightIn(max = 360.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 6.dp)
+        ) {
             Text("Display", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
             DisplayMode.values().forEach { mode ->
                 DropdownMenuItem(
