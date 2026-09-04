@@ -12,11 +12,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Brightness6
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,6 +38,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.example.musicplayer.playback.PlaybackService
 import com.example.musicplayer.viewmodel.MusicViewModel
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +65,8 @@ fun SettingsScreen(viewModel: MusicViewModel, onBack: () -> Unit) {
     val brightnessGesture by viewModel.gestureBrightness.collectAsState()
     val longPress by viewModel.gestureLongPress.collectAsState()
     val zoomGesture by viewModel.gestureZoom.collectAsState()
+    val volumeBoost by viewModel.volumeBoostPercent.collectAsState()
+    var gesturesExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(timerActive) {
         while (timerActive) {
@@ -134,50 +142,56 @@ fun SettingsScreen(viewModel: MusicViewModel, onBack: () -> Unit) {
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
 
-            Text("Video Gestures", style = MaterialTheme.typography.titleLarge)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Video Gestures", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        if (gesturesExpanded) "All gesture controls" else "Tap to view gesture controls",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                IconButton(onClick = { gesturesExpanded = !gesturesExpanded }) {
+                    Icon(
+                        if (gesturesExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = if (gesturesExpanded) "Collapse video gestures" else "Expand video gestures"
+                    )
+                }
+            }
+            if (gesturesExpanded) {
+                Spacer(Modifier.height(8.dp))
+                SettingSwitchRow("Double-tap seek", "Left / right double-tap → ±10 seconds", Icons.Filled.TouchApp, doubleTap, viewModel::setGestureDoubleTap)
+                SettingSwitchRow("Horizontal seek", "Swipe left / right → seek", Icons.Filled.TouchApp, seekGesture, viewModel::setGestureSeek)
+                SettingSwitchRow("Volume swipe", "Right side ↑ / ↓ → system media volume", Icons.Filled.VolumeUp, volumeGesture, viewModel::setGestureVolume)
+                SettingSwitchRow("Brightness swipe", "Left side ↑ / ↓ → screen brightness", Icons.Filled.Brightness6, brightnessGesture, viewModel::setGestureBrightness)
+                SettingSwitchRow("Hold for 2×", "Hold the right side → temporary 2× speed", Icons.Filled.TouchApp, longPress, viewModel::setGestureLongPress)
+                SettingSwitchRow("Pinch zoom", "Two fingers → zoom and pan", Icons.Filled.TouchApp, zoomGesture, viewModel::setGestureZoom)
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(20.dp))
+
+            Text("Audio", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(10.dp))
-            SettingSwitchRow(
-                "Double-tap seek",
-                "Double-tap left/right to rewind or forward 10 seconds",
-                Icons.Filled.TouchApp,
-                doubleTap,
-                viewModel::setGestureDoubleTap
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.VolumeUp, contentDescription = null)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Volume Boost", style = MaterialTheme.typography.titleMedium)
+                    Text("System volume stays matched; boost playback up to 200%", style = MaterialTheme.typography.bodySmall)
+                }
+                Text("${volumeBoost}%", style = MaterialTheme.typography.labelLarge)
+            }
+            Slider(
+                value = volumeBoost.toFloat(),
+                onValueChange = { viewModel.setVolumeBoostPercent((it / 25f).roundToInt() * 25) },
+                valueRange = 100f..200f,
+                steps = 3
             )
-            SettingSwitchRow(
-                "Horizontal seek",
-                "Swipe horizontally on the video to seek",
-                Icons.Filled.TouchApp,
-                seekGesture,
-                viewModel::setGestureSeek
-            )
-            SettingSwitchRow(
-                "Volume swipe",
-                "Swipe vertically on the right side for volume",
-                Icons.Filled.TouchApp,
-                volumeGesture,
-                viewModel::setGestureVolume
-            )
-            SettingSwitchRow(
-                "Brightness swipe",
-                "Swipe vertically on the left side for brightness",
-                Icons.Filled.TouchApp,
-                brightnessGesture,
-                viewModel::setGestureBrightness
-            )
-            SettingSwitchRow(
-                "Hold for 2×",
-                "Hold the right side of the video for temporary 2× speed",
-                Icons.Filled.TouchApp,
-                longPress,
-                viewModel::setGestureLongPress
-            )
-            SettingSwitchRow(
-                "Pinch zoom",
-                "Use two fingers to zoom and pan the video",
-                Icons.Filled.TouchApp,
-                zoomGesture,
-                viewModel::setGestureZoom
-            )
+            Text("100% Normal  •  125%  •  150%  •  175%  •  200%", style = MaterialTheme.typography.bodySmall)
 
             Spacer(Modifier.height(24.dp))
             HorizontalDivider()

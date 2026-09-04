@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class VideoPlaybackController(private val context: Context) {
 
     private var controller: MediaController? = null
+    private val systemVolumeController = SystemVolumeController(context)
     private var queue: List<Video> = emptyList()
     private var pendingVideo: Video? = null
     private var pendingQueue: List<Video> = emptyList()
@@ -138,6 +139,7 @@ class VideoPlaybackController(private val context: Context) {
         } else 0L
         val safeResume = if (savedPosition > 3_000L && savedPosition < (video.duration - 3_000L).coerceAtLeast(0L)) savedPosition else 0L
 
+        c.volume = 1f
         c.setMediaItems(items, startIndex, safeResume)
         c.prepare()
         c.play()
@@ -198,8 +200,9 @@ class VideoPlaybackController(private val context: Context) {
 
     fun setVolume(volume: Float) {
         val safe = volume.coerceIn(0f, 1f)
-        controller?.volume = safe
-        _state.value = _state.value.copy(volume = safe)
+        systemVolumeController.setFraction(safe)
+        controller?.volume = 1f
+        _state.value = _state.value.copy(volume = systemVolumeController.fraction())
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -337,7 +340,7 @@ class VideoPlaybackController(private val context: Context) {
             isPlaying = c.isPlaying,
             shuffleEnabled = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
-            volume = c.volume
+            volume = systemVolumeController.fraction()
         )
         _state.value.currentVideo?.let { video ->
             if (resumePlayback && position > 0L) {

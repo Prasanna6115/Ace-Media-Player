@@ -261,7 +261,7 @@ private fun EqualizerBand(
                         }
                     )
                     .size(28.dp)
-                    .background(Color(0xFFFF6A00), shape = MaterialTheme.shapes.extraLarge)
+                    .background(Color(0xFF00E5FF), shape = MaterialTheme.shapes.extraLarge)
             )
         }
 

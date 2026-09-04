@@ -54,8 +54,6 @@ import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Subtitles
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -373,7 +371,7 @@ fun VideoPlayerScreen(
                         var dragVerticalDelta = 0f
                         detectDragGestures(
                             onDragStart = {
-                                dragVolumeBase = latestState.volume
+                                dragVolumeBase = viewModel.systemMediaVolume()
                                 dragVerticalDelta = 0f
                                 val brightness = latestActivity?.window?.attributes?.screenBrightness
                                 dragBrightnessBase = brightness?.takeIf { it >= 0f } ?: 0.5f
@@ -423,7 +421,7 @@ fun VideoPlayerScreen(
                                     if (!volumeGestureEnabled) return@detectDragGestures
                                     dragVerticalDelta += dragAmount.y
                                     val next = (dragVolumeBase - dragVerticalDelta / h * 1.25f).coerceIn(0f, 1f)
-                                    viewModel.videoSetVolume(next)
+                                    viewModel.setSystemMediaVolume(next)
                                     gestureOverlay = GestureOverlayState(
                                         GestureKind.VOLUME,
                                         "Volume ${((next * 100f).roundToInt())}%",
@@ -566,7 +564,7 @@ fun VideoPlayerScreen(
                 onShuffle = { viewModel.videoToggleShuffle(); showControls() },
                 onRepeat = { viewModel.videoCycleRepeatMode(); showControls() },
                 onVolume = {
-                    viewModel.videoSetVolume(if (state.volume > 0f) 0f else 1f)
+                    viewModel.setSystemMediaVolume(if (viewModel.systemMediaVolume() > 0f) 0f else 1f)
                     showControls()
                 },
                 onAudioSubtitleMenu = {
@@ -640,7 +638,7 @@ fun VideoPlayerScreen(
                     Text(state.errorMessage!!, color = Color.White)
                     Spacer(Modifier.size(8.dp))
                     TextButton(onClick = viewModel.videoController::clearError) {
-                        Text("OK", color = Color(0xFFFFB000))
+                        Text("OK", color = Color(0xFF7C4DFF))
                     }
                 }
             }
@@ -743,7 +741,7 @@ private fun VideoControls(
                     FilledIconButton(
                         onClick = onPlayPause,
                         modifier = Modifier.size(72.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFFF6A00))
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF00E5FF))
                     ) {
                         Icon(
                             if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -774,7 +772,7 @@ private fun VideoControls(
                     },
                     valueRange = 0f..max,
                     onValueChangeFinished = onSeekFinished,
-                    colors = SliderDefaults.colors(thumbColor = Color(0xFFFF6A00), activeTrackColor = Color(0xFFFF6A00))
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFF00E5FF), activeTrackColor = Color(0xFF00E5FF))
                 )
                 Row(Modifier.fillMaxWidth()) {
                     Text(formatVideoMs(state.positionMs), color = Color.White, style = MaterialTheme.typography.labelSmall)
@@ -787,23 +785,23 @@ private fun VideoControls(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onShuffle) {
-                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFFFF6A00) else Color.White)
+                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFF00E5FF) else Color.White)
                     }
                     IconButton(onClick = onRepeat) {
-                        Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White)
+                        Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFF00E5FF) else Color.White)
                     }
                     IconButton(onClick = onAudioSubtitleMenu) {
                         Icon(
                             Icons.Filled.Audiotrack,
                             "Audio & Subtitles",
-                            tint = if (audioTracks.size > 1 || subtitles.isNotEmpty() || subtitlesEnabled) Color(0xFFFFB000) else Color.White
+                            tint = if (audioTracks.size > 1 || subtitles.isNotEmpty() || subtitlesEnabled) Color(0xFF7C4DFF) else Color.White
                         )
                     }
                     IconButton(onClick = onDelayMenu) {
                         Icon(
                             Icons.Filled.Tune,
                             "Audio and subtitle delay",
-                            tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFFFFB000) else Color.White
+                            tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFF7C4DFF) else Color.White
                         )
                     }
                     IconButton(onClick = onSettings) {
@@ -838,7 +836,7 @@ private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
         Column(Modifier.width(260.dp)) {
-            Text("Display & Aspect Ratio", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            Text("Display & Aspect Ratio", color = Color(0xFF7C4DFF), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             LazyColumn(
                 modifier = Modifier.heightIn(max = 360.dp)
             ) {
@@ -874,7 +872,7 @@ private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
         Column(
             Modifier.width(300.dp).verticalScroll(rememberScrollState()).padding(bottom = 6.dp)
         ) {
-            Text("Audio Delay / Subtitle Delay", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            Text("Audio Delay / Subtitle Delay", color = Color(0xFF7C4DFF), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             Text("Fine-tune sync in 50 ms steps", color = Color.LightGray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 14.dp))
 
             DelayRow("Audio Delay", audioDelayMs, onAudioDelayChange)
@@ -885,7 +883,7 @@ private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
                 horizontalArrangement = Arrangement.End
             ) {
                 TextButton(onClick = onReset) {
-                    Text("Reset", color = Color(0xFFFFB000))
+                    Text("Reset", color = Color(0xFF7C4DFF))
                 }
                 TextButton(onClick = onClose) {
                     Text("Close", color = Color.White)
@@ -904,14 +902,14 @@ private fun DelayRow(
     Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Color.White, modifier = Modifier.weight(1f))
-            Text(formatDelayMs(valueMs), color = Color(0xFFFFB000), style = MaterialTheme.typography.labelLarge)
+            Text(formatDelayMs(valueMs), color = Color(0xFF7C4DFF), style = MaterialTheme.typography.labelLarge)
         }
         Slider(
             value = valueMs.toFloat(),
             onValueChange = { onValueChange((it / 50f).roundToInt() * 50) },
             valueRange = -2000f..2000f,
             steps = 79,
-            colors = SliderDefaults.colors(thumbColor = Color(0xFFFF6A00), activeTrackColor = Color(0xFFFF6A00))
+            colors = SliderDefaults.colors(thumbColor = Color(0xFF00E5FF), activeTrackColor = Color(0xFF00E5FF))
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { onValueChange((valueMs - 50).coerceAtLeast(-2000)) }) { Text("−50 ms", color = Color.White) }
@@ -944,7 +942,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
         Column(Modifier.width(300.dp)) {
             Text(
                 "Audio & Subtitles",
-                color = Color(0xFFFFB000),
+                color = Color(0xFF7C4DFF),
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.titleMedium
             )
@@ -953,7 +951,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
                 item {
                     Text(
                         "Audio Track",
-                        color = Color(0xFFFFB000),
+                        color = Color(0xFF7C4DFF),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                     )
@@ -986,7 +984,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
                 item {
                     Text(
                         "Subtitles",
-                        color = Color(0xFFFFB000),
+                        color = Color(0xFF7C4DFF),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                     )
@@ -998,7 +996,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
                     ) {
                         Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
                         TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
-                            Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
+                            Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFF7C4DFF))
                         }
                     }
 

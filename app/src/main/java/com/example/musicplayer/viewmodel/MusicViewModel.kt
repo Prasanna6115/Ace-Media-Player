@@ -13,6 +13,8 @@ import com.example.musicplayer.data.Song
 import com.example.musicplayer.playback.MusicController
 import com.example.musicplayer.playback.PlaybackUiState
 import com.example.musicplayer.playback.VideoPlaybackController
+import com.example.musicplayer.playback.SystemVolumeController
+import com.example.musicplayer.playback.PlaybackService
 import com.example.musicplayer.playback.VideoPlaybackUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,6 +31,7 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val dao = db.musicDao()
     val musicController = MusicController(app)
     val videoController = VideoPlaybackController(app)
+    private val systemVolumeController = SystemVolumeController(app)
 
     private val _allSongs = MutableStateFlow<List<Song>>(emptyList())
     val allSongs: StateFlow<List<Song>> = _allSongs.asStateFlow()
@@ -77,13 +80,15 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val _audioDelayMs = MutableStateFlow(preferences.getInt("video_audio_delay_ms", 0))
     val audioDelayMs: StateFlow<Int> = _audioDelayMs.asStateFlow()
     private val _subtitleDelayMs = MutableStateFlow(preferences.getInt("video_subtitle_delay_ms", 0))
+    private val _volumeBoostPercent = MutableStateFlow(preferences.getInt("volume_boost_percent", 100).coerceIn(100, 200))
+    val volumeBoostPercent: StateFlow<Int> = _volumeBoostPercent.asStateFlow()
     val subtitleDelayMs: StateFlow<Int> = _subtitleDelayMs.asStateFlow()
 
     init {
-        musicController.connect { /* controller ready */ }
+        musicController.connect { PlaybackService.instance?.setVolumeBoostPercent(_volumeBoostPercent.value) }
         videoController.setAutoPlayNext(_autoPlayNext.value)
         videoController.setResumePlayback(_resumePlayback.value)
-        videoController.connect()
+        videoController.connect { PlaybackService.instance?.setVolumeBoostPercent(_volumeBoostPercent.value) }
     }
 
     fun scanLibrary() {
@@ -148,7 +153,19 @@ class MusicViewModel(app: Application) : AndroidViewModel(app) {
     fun videoSeekTo(positionMs: Long) = videoController.seekTo(positionMs)
     fun videoToggleShuffle() = videoController.toggleShuffle()
     fun videoCycleRepeatMode() = videoController.cycleRepeatMode()
-    fun videoSetVolume(volume: Float) = videoController.setVolume(volume)
+    fun videoSetVolume(volume: Float) = setSystemMediaVolume(volume)
+    fun systemMediaVolume(): Float = systemVolumeController.fraction()
+    fun setSystemMediaVolume(volume: Float) {
+        systemVolumeController.setFraction(volume)
+        videoController.setVolume(systemVolumeController.fraction())
+        musicController.setVolume(systemVolumeController.fraction())
+    }
+    fun setVolumeBoostPercent(percent: Int) {
+        val safe = percent.coerceIn(100, 200)
+        _volumeBoostPercent.value = safe
+        preferences.edit().putInt("volume_boost_percent", safe).apply()
+        PlaybackService.instance?.setVolumeBoostPercent(safe)
+    }
     fun videoSetPlaybackSpeed(speed: Float) = videoController.setPlaybackSpeed(speed)
     fun videoAudioTracks() = videoController.audioTracks()
     fun selectAudioTrack(track: com.example.musicplayer.playback.AudioTrack?) = videoController.selectAudio(track)
