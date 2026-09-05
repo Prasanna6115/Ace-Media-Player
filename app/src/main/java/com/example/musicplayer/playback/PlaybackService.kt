@@ -32,10 +32,6 @@ class PlaybackService : MediaSessionService() {
     var sleepTimerJob: SleepTimer? = null
         private set
 
-    private val volumeBoostController = VolumeBoostController()
-
-    fun setVolumeBoostPercent(percent: Int) = volumeBoostController.setBoostPercent(percent)
-
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -45,11 +41,6 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         player.repeatMode = Player.REPEAT_MODE_OFF
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) volumeBoostController.attach(player.audioSessionId)
-            }
-        })
 
         val openAppIntent = PendingIntent.getActivity(
             this, 0,
@@ -76,7 +67,6 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         sleepTimerJob?.cancel()
-        volumeBoostController.release()
         mediaSession?.run {
             player.release()
             release()

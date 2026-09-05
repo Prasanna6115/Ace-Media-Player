@@ -28,6 +28,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
 import com.example.musicplayer.ui.components.MiniPlayer
+import com.example.musicplayer.ui.components.tvFocusable
 import com.example.musicplayer.ui.screens.*
 import com.example.musicplayer.viewmodel.MusicViewModel
 
@@ -91,6 +92,7 @@ fun MusicNavGraph(viewModel: MusicViewModel) {
                                         }
                                     }
                                 },
+                                modifier = Modifier.tvFocusable(),
                                 icon = {
                                     Icon(iconFor(screen), contentDescription = screen.label)
                                 },

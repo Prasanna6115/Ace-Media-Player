@@ -9,11 +9,11 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.musicplayer"
+        applicationId = "com.example.musicplayer.tv"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0-TV"
     }
 
     buildFeatures {
@@ -42,6 +42,7 @@ android {
 dependencies {
     // Core / Compose
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.activity:activity-compose:1.9.1")
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))

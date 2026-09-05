@@ -31,7 +31,6 @@ data class PlaybackUiState(
 class MusicController(private val context: Context) {
 
     private var controller: MediaController? = null
-    private val systemVolumeController = SystemVolumeController(context)
     private var queue: List<Song> = emptyList()
 
     private val _state = MutableStateFlow(PlaybackUiState())
@@ -79,8 +78,7 @@ class MusicController(private val context: Context) {
         val c = controller ?: return
         _state.value = _state.value.copy(
             positionMs = c.currentPosition.coerceAtLeast(0),
-            durationMs = c.duration.coerceAtLeast(0),
-            volume = systemVolumeController.fraction()
+            durationMs = c.duration.coerceAtLeast(0)
         )
     }
 
@@ -130,8 +128,7 @@ class MusicController(private val context: Context) {
         c.setMediaItems(items, snapshot.index.coerceIn(0, items.lastIndex), snapshot.positionMs)
         c.shuffleModeEnabled = snapshot.shuffleEnabled
         c.repeatMode = snapshot.repeatMode
-        systemVolumeController.setFraction(snapshot.volume)
-        c.volume = 1f
+        c.volume = snapshot.volume
         c.prepare()
         if (snapshot.isPlaying) c.play() else c.pause()
         _state.value = _state.value.copy(
@@ -190,10 +187,8 @@ class MusicController(private val context: Context) {
     }
 
     fun setVolume(volume: Float) {
-        val safe = volume.coerceIn(0f, 1f)
-        systemVolumeController.setFraction(safe)
-        controller?.volume = 1f
-        _state.value = _state.value.copy(volume = systemVolumeController.fraction())
+        controller?.volume = volume.coerceIn(0f, 1f)
+        _state.value = _state.value.copy(volume = volume)
     }
 
     fun release() {

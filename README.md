@@ -80,3 +80,19 @@ app/src/main/java/com/example/musicplayer/
 - Playlists/Favorites persist across restarts (Room), but the scanned library
   itself is re-scanned from MediaStore every time the app opens - so newly
   added songs on the device show up automatically.
+
+## ACE Media Player TV Edition
+
+This repository is the TV-specific edition of ACE Media Player. It is optimized for Android TV in landscape orientation and uses a separate application ID (`com.example.musicplayer.tv`) so it can coexist with the mobile edition.
+
+### TV controls
+- D-pad navigation with visible cyan focus highlight
+- OK/Center reveals the video controls when hidden
+- D-pad Left/Right navigates the control rows
+- OK activates the selected control
+- Dedicated -10 sec and +10 sec video controls
+- Play/Pause media-key support
+- TV-friendly large library/video rows
+- Cyan/violet TV splash and launcher artwork
+
+The existing playback engine and media features are reused from the stable ACE 2.x codebase; touch gestures are not required for TV navigation.
