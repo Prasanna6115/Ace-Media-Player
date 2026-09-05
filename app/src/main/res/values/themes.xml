@@ -1,17 +1,3 @@
 <resources>
-    <style name="Theme.MusicPlayer" parent="android:style/Theme.Material.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:colorAccent">#00E5FF</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:statusBarColor">#05060A</item>
-        <item name="android:navigationBarColor">#05060A</item>
-        <item name="android:windowBackground">#05060A</item>
-    </style>
-
-    <style name="Theme.MusicPlayer.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#050A14</item>
-        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_tv</item>
-        <item name="postSplashScreenTheme">@style/Theme.MusicPlayer</item>
-    </style>
+    <style name="Theme.MusicPlayer" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>

@@ -6,8 +6,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val AceCyan = Color(0xFF00E5FF)
-private val AceViolet = Color(0xFF8B5CF6)
+private val AceOrange = Color(0xFFFF6A00)
+private val AceAmber = Color(0xFFFFB000)
 private val AceDarkBackground = Color(0xFF080A0F)
 private val AceDarkSurface = Color(0xFF15171C)
 private val AceDarkSurfaceVariant = Color(0xFF20242B)
@@ -15,11 +15,11 @@ private val AceDarkText = Color(0xFFF5F5F5)
 private val AceDarkMuted = Color(0xFFB8BDC7)
 
 private val AceDarkColors = darkColorScheme(
-    primary = AceCyan,
+    primary = AceOrange,
     onPrimary = Color.White,
-    secondary = AceViolet,
+    secondary = AceAmber,
     onSecondary = Color.Black,
-    tertiary = Color(0xFFB04CFF),
+    tertiary = AceAmber,
     background = AceDarkBackground,
     onBackground = AceDarkText,
     surface = AceDarkSurface,
@@ -29,11 +29,11 @@ private val AceDarkColors = darkColorScheme(
 )
 
 private val AceLightColors = lightColorScheme(
-    primary = Color(0xFF00B8D4),
+    primary = Color(0xFFE85D00),
     onPrimary = Color.White,
-    secondary = Color(0xFF6D45C7),
+    secondary = Color(0xFF9A6800),
     onSecondary = Color.White,
-    tertiary = Color(0xFF8B5CF6),
+    tertiary = Color(0xFFB45309),
     background = Color(0xFFF8F8FA),
     onBackground = Color(0xFF17181C),
     surface = Color.White,

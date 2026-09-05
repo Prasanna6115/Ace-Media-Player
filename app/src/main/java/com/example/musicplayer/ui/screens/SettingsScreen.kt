@@ -1,6 +1,5 @@
 package com.example.musicplayer.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +15,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -37,11 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.unit.dp
 import com.example.musicplayer.playback.PlaybackService
 import com.example.musicplayer.viewmodel.MusicViewModel
-import com.example.musicplayer.ui.components.tvFocusable
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +53,12 @@ fun SettingsScreen(viewModel: MusicViewModel, onBack: () -> Unit) {
     val autoPlayNext by viewModel.autoPlayNext.collectAsState()
     val resumePlayback by viewModel.resumePlayback.collectAsState()
     val keepScreenOn by viewModel.keepScreenOn.collectAsState()
+    val doubleTap by viewModel.gestureDoubleTap.collectAsState()
+    val seekGesture by viewModel.gestureSeek.collectAsState()
+    val volumeGesture by viewModel.gestureVolume.collectAsState()
+    val brightnessGesture by viewModel.gestureBrightness.collectAsState()
+    val longPress by viewModel.gestureLongPress.collectAsState()
+    val zoomGesture by viewModel.gestureZoom.collectAsState()
 
     LaunchedEffect(timerActive) {
         while (timerActive) {
@@ -130,17 +134,50 @@ fun SettingsScreen(viewModel: MusicViewModel, onBack: () -> Unit) {
             HorizontalDivider()
             Spacer(Modifier.height(20.dp))
 
-            Text("TV Remote Controls", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Use the D-pad to move between controls. Press OK to select.",
-                style = MaterialTheme.typography.bodyLarge
+            Text("Video Gestures", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(10.dp))
+            SettingSwitchRow(
+                "Double-tap seek",
+                "Double-tap left/right to rewind or forward 10 seconds",
+                Icons.Filled.TouchApp,
+                doubleTap,
+                viewModel::setGestureDoubleTap
             )
-            Spacer(Modifier.height(8.dp))
-            Text("Video player", style = MaterialTheme.typography.titleMedium)
-            Text("OK → show controls   •   ← / → → navigate   •   OK → activate", style = MaterialTheme.typography.bodyMedium)
-            Text("← 10 sec / → 10 sec • Play/Pause • Previous/Next", style = MaterialTheme.typography.bodyMedium)
-            Text("Back → close a menu / leave the player", style = MaterialTheme.typography.bodyMedium)
+            SettingSwitchRow(
+                "Horizontal seek",
+                "Swipe horizontally on the video to seek",
+                Icons.Filled.TouchApp,
+                seekGesture,
+                viewModel::setGestureSeek
+            )
+            SettingSwitchRow(
+                "Volume swipe",
+                "Swipe vertically on the right side for volume",
+                Icons.Filled.TouchApp,
+                volumeGesture,
+                viewModel::setGestureVolume
+            )
+            SettingSwitchRow(
+                "Brightness swipe",
+                "Swipe vertically on the left side for brightness",
+                Icons.Filled.TouchApp,
+                brightnessGesture,
+                viewModel::setGestureBrightness
+            )
+            SettingSwitchRow(
+                "Hold for 2×",
+                "Hold the right side of the video for temporary 2× speed",
+                Icons.Filled.TouchApp,
+                longPress,
+                viewModel::setGestureLongPress
+            )
+            SettingSwitchRow(
+                "Pinch zoom",
+                "Use two fingers to zoom and pan the video",
+                Icons.Filled.TouchApp,
+                zoomGesture,
+                viewModel::setGestureZoom
+            )
 
             Spacer(Modifier.height(24.dp))
             HorizontalDivider()
@@ -174,7 +211,7 @@ fun SettingsScreen(viewModel: MusicViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             Text("ACE Media Player", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(6.dp))
-            Text("TV Edition 1.0 • based on ACE 2.1", style = MaterialTheme.typography.bodyMedium)
+            Text("Version 2.1", style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -190,9 +227,7 @@ private fun SettingSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .tvFocusable()
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, contentDescription = null)
@@ -201,10 +236,6 @@ private fun SettingSwitchRow(
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall)
         }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.focusProperties { canFocus = false }
-        )
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

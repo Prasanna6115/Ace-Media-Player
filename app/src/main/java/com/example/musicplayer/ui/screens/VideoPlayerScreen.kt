@@ -7,15 +7,11 @@ import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.view.View
-import android.view.KeyEvent as AndroidKeyEvent
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.transformable
@@ -35,7 +31,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -87,10 +82,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -183,10 +174,6 @@ fun VideoPlayerScreen(
     var zoomScale by remember { mutableStateOf(1f) }
     var zoomPanX by remember { mutableStateOf(0f) }
     var zoomPanY by remember { mutableStateOf(0f) }
-    // TV remote focus is kept at the player surface so the D-pad can control the overlay.
-    var tvControlIndex by remember { mutableIntStateOf(2) }
-    var overlayFocusIndex by remember { mutableIntStateOf(0) }
-    val tvFocusRequester = remember { FocusRequester() }
 
     val selectedVideo = videos.firstOrNull { it.id == videoId } ?: state.currentVideo
 
@@ -265,12 +252,6 @@ fun VideoPlayerScreen(
         videos.firstOrNull { it.id == videoId }?.let(viewModel::playVideo)
     }
 
-    LaunchedEffect(controlsVisible, controlsLocked) {
-        if (!controlsLocked) {
-            tvFocusRequester.requestFocus()
-        }
-    }
-
     LaunchedEffect(showUnlockPrompt) {
         if (showUnlockPrompt) {
             delay(2200)
@@ -278,8 +259,8 @@ fun VideoPlayerScreen(
         }
     }
 
-    LaunchedEffect(interactionTick, controlsLocked, draggingSeek, showSettings, showAudioMenu, showSubtitleMenu, showDelayMenu) {
-        if (!controlsLocked && !draggingSeek && !showSettings && !showAudioMenu && !showSubtitleMenu && !showDelayMenu) {
+    LaunchedEffect(interactionTick, controlsLocked, draggingSeek) {
+        if (!controlsLocked && !draggingSeek) {
             delay(3500)
             controlsVisible = false
             showSettings = false
@@ -307,197 +288,7 @@ fun VideoPlayerScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black)
-            .focusRequester(tvFocusRequester)
-            .focusable()
-            .onPreviewKeyEvent { event ->
-                if (event.nativeKeyEvent.action != AndroidKeyEvent.ACTION_DOWN) return@onPreviewKeyEvent false
-                val code = event.nativeKeyEvent.keyCode
-
-                if (controlsLocked) {
-                    if (code == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
-                        code == AndroidKeyEvent.KEYCODE_ENTER ||
-                        code == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
-                    ) {
-                        showUnlockPrompt = true
-                        return@onPreviewKeyEvent true
-                    }
-                    return@onPreviewKeyEvent false
-                }
-
-                // When a settings/audio/subtitle overlay is open, the root focus
-                // owns the D-pad. This makes the overlay reliably remote-navigable
-                // even though the video surface itself is an AndroidView.
-                val overlayOpen = showSettings || showAudioMenu || showSubtitleMenu || showDelayMenu
-                if (overlayOpen) {
-                    val count = when {
-                        showSettings -> DisplayMode.values().size + 2
-                        showAudioMenu || showSubtitleMenu -> 1 + state.audioTracks.size + 1 + 1 + state.subtitleTracks.size + 1
-                        else -> 6
-                    }
-                    when (code) {
-                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            overlayFocusIndex = (overlayFocusIndex - 1 + count) % count
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            overlayFocusIndex = (overlayFocusIndex + 1) % count
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER,
-                        AndroidKeyEvent.KEYCODE_ENTER,
-                        AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            when {
-                                showSettings -> when (overlayFocusIndex) {
-                                    in 0 until DisplayMode.values().size -> {
-                                        currentDisplayMode = DisplayMode.values()[overlayFocusIndex]
-                                        zoomScale = 1f
-                                        zoomPanX = 0f
-                                        zoomPanY = 0f
-                                        showSettings = false
-                                        showControls()
-                                    }
-                                    DisplayMode.values().size -> {
-                                        zoomScale = 1f
-                                        zoomPanX = 0f
-                                        zoomPanY = 0f
-                                        showControls()
-                                    }
-                                    else -> { showSettings = false; showControls() }
-                                }
-                                showAudioMenu || showSubtitleMenu -> {
-                                    val audioCount = state.audioTracks.size
-                                    when {
-                                        overlayFocusIndex == 0 -> { viewModel.selectAudioTrack(null); showAudioMenu = false; showSubtitleMenu = false; showControls() }
-                                        overlayFocusIndex in 1..audioCount -> {
-                                            viewModel.selectAudioTrack(state.audioTracks[overlayFocusIndex - 1]); showAudioMenu = false; showSubtitleMenu = false; showControls()
-                                        }
-                                        overlayFocusIndex == audioCount + 1 -> { viewModel.setSubtitlesEnabled(!state.subtitlesEnabled); interactionTick++ }
-                                        overlayFocusIndex == audioCount + 2 -> { viewModel.selectSubtitle(null); showAudioMenu = false; showSubtitleMenu = false; showControls() }
-                                        overlayFocusIndex in (audioCount + 3)..(audioCount + 2 + state.subtitleTracks.size) -> {
-                                            viewModel.selectSubtitle(state.subtitleTracks[overlayFocusIndex - audioCount - 3]); showAudioMenu = false; showSubtitleMenu = false; showControls()
-                                        }
-                                        else -> { showAudioMenu = false; showSubtitleMenu = false; showControls() }
-                                    }
-                                }
-                                else -> when (overlayFocusIndex) {
-                                    0 -> viewModel.setAudioDelayMs((audioDelayMs - 50).coerceAtLeast(-2000))
-                                    1 -> viewModel.setAudioDelayMs((audioDelayMs + 50).coerceAtMost(2000))
-                                    2 -> viewModel.setSubtitleDelayMs((subtitleDelayMs - 50).coerceAtLeast(-2000))
-                                    3 -> viewModel.setSubtitleDelayMs((subtitleDelayMs + 50).coerceAtMost(2000))
-                                    4 -> viewModel.resetVideoDelays()
-                                    else -> { showDelayMenu = false; showControls() }
-                                }
-                            }
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> true
-                        AndroidKeyEvent.KEYCODE_BACK -> {
-                            showSettings = false
-                            showAudioMenu = false
-                            showSubtitleMenu = false
-                            showDelayMenu = false
-                            true
-                        }
-                        else -> false
-                    }
-                } else {
-                    if (!controlsVisible) {
-                        controlsVisible = true
-                        tvControlIndex = 2
-                        interactionTick++
-                        return@onPreviewKeyEvent true
-                    }
-
-                    val topCount = 5
-                    val bottomCount = 7
-                    val seekIndex = topCount
-                    val bottomStart = seekIndex + 1
-                    when (code) {
-                        AndroidKeyEvent.KEYCODE_DPAD_LEFT -> {
-                            if (tvControlIndex == seekIndex) {
-                                val target = (state.positionMs - 10_000L).coerceAtLeast(0L)
-                                viewModel.videoSeekTo(target)
-                                gestureOverlay = GestureOverlayState(GestureKind.HORIZONTAL_SEEK, "−10 sec", Icons.Filled.Replay10)
-                                scope.launch { delay(700); gestureOverlay = GestureOverlayState() }
-                                interactionTick++
-                                return@onPreviewKeyEvent true
-                            }
-                            tvControlIndex = when {
-                                tvControlIndex in 0 until topCount -> (tvControlIndex - 1 + topCount) % topCount
-                                tvControlIndex == seekIndex -> seekIndex
-                                else -> bottomStart + ((tvControlIndex - bottomStart - 1 + bottomCount) % bottomCount)
-                            }
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> {
-                            if (tvControlIndex == seekIndex) {
-                                val target = (state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L))
-                                viewModel.videoSeekTo(target)
-                                gestureOverlay = GestureOverlayState(GestureKind.HORIZONTAL_SEEK, "+10 sec", Icons.Filled.Forward10)
-                                scope.launch { delay(700); gestureOverlay = GestureOverlayState() }
-                                interactionTick++
-                                return@onPreviewKeyEvent true
-                            }
-                            tvControlIndex = when {
-                                tvControlIndex in 0 until topCount -> (tvControlIndex + 1) % topCount
-                                tvControlIndex == seekIndex -> seekIndex
-                                else -> bottomStart + ((tvControlIndex - bottomStart + 1) % bottomCount)
-                            }
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_UP -> {
-                            tvControlIndex = when {
-                                tvControlIndex >= bottomStart -> (tvControlIndex - bottomStart).coerceAtMost(topCount - 1)
-                                tvControlIndex == seekIndex -> 2
-                                else -> tvControlIndex
-                            }
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                            tvControlIndex = when {
-                                tvControlIndex in 0 until topCount -> if (tvControlIndex == 2) seekIndex else bottomStart + tvControlIndex.coerceAtMost(bottomCount - 1)
-                                tvControlIndex == seekIndex -> bottomStart + 2
-                                else -> tvControlIndex
-                            }
-                            interactionTick++
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_DPAD_CENTER,
-                        AndroidKeyEvent.KEYCODE_ENTER,
-                        AndroidKeyEvent.KEYCODE_NUMPAD_ENTER -> {
-                            when (tvControlIndex) {
-                                0 -> viewModel.videoSeekTo((state.positionMs - 10_000L).coerceAtLeast(0L))
-                                1 -> viewModel.videoPrevious()
-                                2 -> viewModel.videoPlayPause()
-                                3 -> viewModel.videoNext()
-                                4 -> viewModel.videoSeekTo((state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L)))
-                                seekIndex -> { /* focus only; Left/Right controls seek */ }
-                                bottomStart + 0 -> viewModel.videoToggleShuffle()
-                                bottomStart + 1 -> viewModel.videoCycleRepeatMode()
-                                bottomStart + 2 -> { showAudioMenu = true; showSubtitleMenu = false; showSettings = false; showDelayMenu = false; overlayFocusIndex = 0 }
-                                bottomStart + 3 -> { showDelayMenu = true; showSettings = false; showAudioMenu = false; showSubtitleMenu = false; overlayFocusIndex = 0 }
-                                bottomStart + 4 -> { showSettings = true; showAudioMenu = false; showSubtitleMenu = false; showDelayMenu = false; overlayFocusIndex = 0 }
-                                bottomStart + 5 -> toggleLock()
-                                bottomStart + 6 -> { if (fullscreen) exitFullscreen() else enterFullscreen() }
-                            }
-                            showControls()
-                            true
-                        }
-                        AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { viewModel.videoPlayPause(); showControls(); true }
-                        else -> false
-                    }
-                }
-            }
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         val player = viewModel.videoPlayer()
         if (player != null) {
             BoxWithConstraints(
@@ -748,11 +539,10 @@ fun VideoPlayerScreen(
             VideoControls(
                 title = selectedVideo?.title ?: "Video",
                 state = state,
-                tvControlIndex = tvControlIndex,
                 fullscreen = fullscreen,
                 showSettings = showSettings,
                 onBack = { if (fullscreen) exitFullscreen() else onBack() },
-                onMore = { showSettings = !showSettings; showSubtitleMenu = false; showAudioMenu = false; showDelayMenu = false; overlayFocusIndex = 0; interactionTick++ },
+                onMore = { showSettings = !showSettings; showSubtitleMenu = false; showAudioMenu = false; showDelayMenu = false; interactionTick++ },
                 onSeek = viewModel::videoSeekTo,
                 onSeekFinished = {
                     draggingSeek = false
@@ -785,11 +575,10 @@ fun VideoPlayerScreen(
                     showSubtitleMenu = false
                     showSettings = false
                     showDelayMenu = false
-                    overlayFocusIndex = 0
                     interactionTick++
                 },
-                onDelayMenu = { showDelayMenu = !showDelayMenu; showSettings = false; showAudioMenu = false; showSubtitleMenu = false; overlayFocusIndex = 0; interactionTick++ },
-                onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; showDelayMenu = false; overlayFocusIndex = 0; interactionTick++ },
+                onDelayMenu = { showDelayMenu = !showDelayMenu; showSettings = false; showAudioMenu = false; showSubtitleMenu = false; interactionTick++ },
+                onSettings = { showSettings = !showSettings; showAudioMenu = false; showSubtitleMenu = false; showDelayMenu = false; interactionTick++ },
                 onLock = ::toggleLock,
                 onFullscreen = { if (fullscreen) exitFullscreen() else enterFullscreen() },
                 displayMode = currentDisplayMode,
@@ -808,7 +597,6 @@ fun VideoPlayerScreen(
 
             if (showSettings && !controlsLocked) {
                 VideoSettingsMenu(
-                    focusedIndex = overlayFocusIndex,
                     displayMode = currentDisplayMode,
                     zoomScale = zoomScale,
                     onDisplayMode = { currentDisplayMode = it; zoomScale = 1f; zoomPanX = 0f; zoomPanY = 0f; showSettings = false; showControls() },
@@ -819,7 +607,6 @@ fun VideoPlayerScreen(
 
             if ((showAudioMenu || showSubtitleMenu) && !controlsLocked) {
                 AudioSubtitleMenu(
-                    focusedIndex = overlayFocusIndex,
                     audioTracks = state.audioTracks,
                     selectedAudioKey = state.selectedAudioKey,
                     onSelectAudio = { viewModel.selectAudioTrack(it); showAudioMenu = false; showSubtitleMenu = false; showControls() },
@@ -834,7 +621,6 @@ fun VideoPlayerScreen(
 
             if (showDelayMenu && !controlsLocked) {
                 DelaySyncMenu(
-                    focusedIndex = overlayFocusIndex,
                     audioDelayMs = audioDelayMs,
                     subtitleDelayMs = subtitleDelayMs,
                     onAudioDelayChange = viewModel::setAudioDelayMs,
@@ -854,7 +640,7 @@ fun VideoPlayerScreen(
                     Text(state.errorMessage!!, color = Color.White)
                     Spacer(Modifier.size(8.dp))
                     TextButton(onClick = viewModel.videoController::clearError) {
-                        Text("OK", color = Color(0xFF8B5CF6))
+                        Text("OK", color = Color(0xFFFFB000))
                     }
                 }
             }
@@ -900,7 +686,6 @@ private fun SeekFramePreview(bitmap: Bitmap, position: Long, modifier: Modifier)
 private fun VideoControls(
     title: String,
     state: com.example.musicplayer.playback.VideoPlaybackUiState,
-    tvControlIndex: Int,
     fullscreen: Boolean,
     showSettings: Boolean,
     onBack: () -> Unit,
@@ -938,33 +723,27 @@ private fun VideoControls(
                 Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.58f)).padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack, modifier = Modifier.focusProperties { canFocus = false }) { Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White) }
+                IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back", tint = Color.White) }
                 Text(title, color = Color.White, maxLines = 1, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = onMore, modifier = Modifier.focusProperties { canFocus = false }) { Icon(Icons.Filled.MoreVert, "More", tint = Color.White) }
+                IconButton(onClick = onMore) { Icon(Icons.Filled.MoreVert, "More", tint = Color.White) }
             }
 
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.BottomCenter) {
-                Text(
-                    text = "TV Remote • ${tvControlLabel(tvControlIndex)} • OK = select",
-                    color = Color(0xFFB8F6FF),
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }, modifier = tvControlModifier(0, tvControlIndex)) {
+                    IconButton(onClick = { onSeek((state.positionMs - 10_000L).coerceAtLeast(0L)) }) {
                         Icon(Icons.Filled.Replay10, "Rewind 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
-                    IconButton(onClick = onPrevious, modifier = tvControlModifier(1, tvControlIndex)) {
+                    IconButton(onClick = onPrevious) {
                         Icon(Icons.Filled.SkipPrevious, "Previous", tint = Color.White, modifier = Modifier.size(38.dp))
                     }
                     FilledIconButton(
                         onClick = onPlayPause,
-                        modifier = tvControlModifier(2, tvControlIndex).size(76.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFF00E5FF))
+                        modifier = Modifier.size(72.dp),
+                        colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color(0xFFFF6A00))
                     ) {
                         Icon(
                             if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -973,10 +752,10 @@ private fun VideoControls(
                             modifier = Modifier.size(40.dp)
                         )
                     }
-                    IconButton(onClick = onNext, modifier = tvControlModifier(3, tvControlIndex)) {
+                    IconButton(onClick = onNext) {
                         Icon(Icons.Filled.SkipNext, "Next", tint = Color.White, modifier = Modifier.size(38.dp))
                     }
-                    IconButton(onClick = { onSeek((state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L))) }, modifier = tvControlModifier(4, tvControlIndex)) {
+                    IconButton(onClick = { onSeek((state.positionMs + 10_000L).coerceAtMost(state.durationMs.coerceAtLeast(0L))) }) {
                         Icon(Icons.Filled.Forward10, "Forward 10 seconds", tint = Color.White, modifier = Modifier.size(32.dp))
                     }
                 }
@@ -986,11 +765,7 @@ private fun VideoControls(
                 Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 val max = state.durationMs.coerceAtLeast(1L).toFloat()
-                Box(
-                    modifier = tvSeekModifier(5, tvControlIndex).padding(horizontal = 4.dp, vertical = 2.dp)
-                ) {
-                    Slider(
-                    modifier = Modifier.focusProperties { canFocus = false },
+                Slider(
                     value = state.positionMs.toFloat().coerceIn(0f, max),
                     onValueChange = { value ->
                         val position = value.toLong()
@@ -999,9 +774,8 @@ private fun VideoControls(
                     },
                     valueRange = 0f..max,
                     onValueChangeFinished = onSeekFinished,
-                    colors = SliderDefaults.colors(thumbColor = Color(0xFF00E5FF), activeTrackColor = Color(0xFF00E5FF))
-                    )
-                }
+                    colors = SliderDefaults.colors(thumbColor = Color(0xFFFF6A00), activeTrackColor = Color(0xFFFF6A00))
+                )
                 Row(Modifier.fillMaxWidth()) {
                     Text(formatVideoMs(state.positionMs), color = Color.White, style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.weight(1f))
@@ -1012,33 +786,33 @@ private fun VideoControls(
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onShuffle, modifier = tvControlModifier(6, tvControlIndex)) {
-                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFF00E5FF) else Color.White)
+                    IconButton(onClick = onShuffle) {
+                        Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (state.shuffleEnabled) Color(0xFFFF6A00) else Color.White)
                     }
-                    IconButton(onClick = onRepeat, modifier = tvControlModifier(7, tvControlIndex)) {
-                        Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFF00E5FF) else Color.White)
+                    IconButton(onClick = onRepeat) {
+                        Icon(Icons.Filled.Repeat, "Repeat", tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) Color(0xFFFF6A00) else Color.White)
                     }
-                    IconButton(onClick = onAudioSubtitleMenu, modifier = tvControlModifier(8, tvControlIndex)) {
+                    IconButton(onClick = onAudioSubtitleMenu) {
                         Icon(
                             Icons.Filled.Audiotrack,
                             "Audio & Subtitles",
-                            tint = if (audioTracks.size > 1 || subtitles.isNotEmpty() || subtitlesEnabled) Color(0xFF8B5CF6) else Color.White
+                            tint = if (audioTracks.size > 1 || subtitles.isNotEmpty() || subtitlesEnabled) Color(0xFFFFB000) else Color.White
                         )
                     }
-                    IconButton(onClick = onDelayMenu, modifier = tvControlModifier(9, tvControlIndex)) {
+                    IconButton(onClick = onDelayMenu) {
                         Icon(
                             Icons.Filled.Tune,
                             "Audio and subtitle delay",
-                            tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFF8B5CF6) else Color.White
+                            tint = if (audioDelayMs != 0 || subtitleDelayMs != 0) Color(0xFFFFB000) else Color.White
                         )
                     }
-                    IconButton(onClick = onSettings, modifier = tvControlModifier(10, tvControlIndex)) {
+                    IconButton(onClick = onSettings) {
                         Icon(Icons.Filled.Settings, "Video settings", tint = Color.White)
                     }
-                    IconButton(onClick = onLock, modifier = tvControlModifier(11, tvControlIndex)) {
+                    IconButton(onClick = onLock) {
                         Icon(Icons.Filled.Lock, "Lock controls", tint = Color.White)
                     }
-                    IconButton(onClick = onFullscreen, modifier = tvControlModifier(12, tvControlIndex)) {
+                    IconButton(onClick = onFullscreen) {
                         Icon(
                             if (fullscreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
                             if (fullscreen) "Exit fullscreen" else "Fullscreen",
@@ -1051,90 +825,41 @@ private fun VideoControls(
     }
 }
 
-
-private fun tvMenuItemModifier(focused: Boolean): Modifier = Modifier
-    .border(
-        width = if (focused) 2.dp else 0.dp,
-        color = if (focused) Color(0xFF00E5FF) else Color.Transparent,
-        shape = RoundedCornerShape(10.dp)
-    )
-
-private fun tvSeekModifier(index: Int, selectedIndex: Int): Modifier = Modifier
-    .border(
-        width = if (index == selectedIndex) 3.dp else 0.dp,
-        color = if (index == selectedIndex) Color(0xFF8B5CF6) else Color.Transparent,
-        shape = RoundedCornerShape(10.dp)
-    )
-
-private fun tvControlModifier(index: Int, selectedIndex: Int): Modifier = Modifier
-    .focusProperties { canFocus = false }
-    .border(
-        width = if (index == selectedIndex) 2.dp else 0.dp,
-        color = if (index == selectedIndex) Color(0xFF00E5FF) else Color.Transparent,
-        shape = RoundedCornerShape(14.dp)
-    )
-
-private fun tvControlLabel(index: Int): String = when (index) {
-    0 -> "−10 sec"
-    1 -> "Previous"
-    2 -> "Play / Pause"
-    3 -> "Next"
-    4 -> "+10 sec"
-    5 -> "Seek bar • Left/Right = ±10 sec"
-    6 -> "Shuffle"
-    7 -> "Repeat"
-    8 -> "Audio / Subtitles"
-    9 -> "A/V Delay"
-    10 -> "Settings"
-    11 -> "Lock"
-    12 -> "Fullscreen"
-    else -> "Controls"
-}
-
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.VideoSettingsMenu(
-    focusedIndex: Int,
     displayMode: DisplayMode,
     zoomScale: Float,
     onDisplayMode: (DisplayMode) -> Unit,
     onResetZoom: () -> Unit,
     onClose: () -> Unit
 ) {
-    val listState = rememberLazyListState()
-    LaunchedEffect(focusedIndex) {
-        listState.animateScrollToItem(focusedIndex.coerceAtLeast(0).coerceAtMost(DisplayMode.values().size - 1))
-    }
     Card(
         Modifier.align(Alignment.TopEnd).padding(top = 58.dp, end = 12.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xF015171C))
     ) {
         Column(Modifier.width(260.dp)) {
-            Text("Display & Aspect Ratio", color = Color(0xFF8B5CF6), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            Text("Display & Aspect Ratio", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             LazyColumn(
-                state = listState,
                 modifier = Modifier.heightIn(max = 360.dp)
             ) {
                 items(DisplayMode.values().toList()) { mode ->
                     DropdownMenuItem(
-                        modifier = tvMenuItemModifier(focusedIndex == DisplayMode.values().indexOf(mode)),
                         text = { Text(if (mode == displayMode) "✓ ${mode.label}" else mode.label, color = Color.White) },
                         onClick = { onDisplayMode(mode) }
                     )
                 }
             }
             DropdownMenuItem(
-                modifier = tvMenuItemModifier(focusedIndex == DisplayMode.values().size),
                 text = { Text("Reset Zoom (${String.format("%.1f", zoomScale)}×)", color = Color.White) },
                 onClick = onResetZoom
             )
-            DropdownMenuItem(modifier = tvMenuItemModifier(focusedIndex == DisplayMode.values().size + 1), text = { Text("Close", color = Color.White) }, onClick = onClose)
+            DropdownMenuItem(text = { Text("Close", color = Color.White) }, onClick = onClose)
         }
     }
 }
 
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
-    focusedIndex: Int,
     audioDelayMs: Int,
     subtitleDelayMs: Int,
     onAudioDelayChange: (Int) -> Unit,
@@ -1149,20 +874,20 @@ private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
         Column(
             Modifier.width(300.dp).verticalScroll(rememberScrollState()).padding(bottom = 6.dp)
         ) {
-            Text("Audio Delay / Subtitle Delay", color = Color(0xFF8B5CF6), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            Text("Audio Delay / Subtitle Delay", color = Color(0xFFFFB000), modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             Text("Fine-tune sync in 50 ms steps", color = Color.LightGray, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 14.dp))
 
-            DelayRow("Audio Delay", audioDelayMs, onAudioDelayChange, focusedIndex == 0 || focusedIndex == 1)
-            DelayRow("Subtitle Delay", subtitleDelayMs, onSubtitleDelayChange, focusedIndex == 2 || focusedIndex == 3)
+            DelayRow("Audio Delay", audioDelayMs, onAudioDelayChange)
+            DelayRow("Subtitle Delay", subtitleDelayMs, onSubtitleDelayChange)
 
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = onReset, modifier = tvMenuItemModifier(focusedIndex == 4)) {
-                    Text("Reset", color = Color(0xFF8B5CF6))
+                TextButton(onClick = onReset) {
+                    Text("Reset", color = Color(0xFFFFB000))
                 }
-                TextButton(onClick = onClose, modifier = tvMenuItemModifier(focusedIndex == 5)) {
+                TextButton(onClick = onClose) {
                     Text("Close", color = Color.White)
                 }
             }
@@ -1174,20 +899,19 @@ private fun androidx.compose.foundation.layout.BoxScope.DelaySyncMenu(
 private fun DelayRow(
     label: String,
     valueMs: Int,
-    onValueChange: (Int) -> Unit,
-    focused: Boolean = false
+    onValueChange: (Int) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp).then(tvMenuItemModifier(focused))) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Color.White, modifier = Modifier.weight(1f))
-            Text(formatDelayMs(valueMs), color = Color(0xFF8B5CF6), style = MaterialTheme.typography.labelLarge)
+            Text(formatDelayMs(valueMs), color = Color(0xFFFFB000), style = MaterialTheme.typography.labelLarge)
         }
         Slider(
             value = valueMs.toFloat(),
             onValueChange = { onValueChange((it / 50f).roundToInt() * 50) },
             valueRange = -2000f..2000f,
             steps = 79,
-            colors = SliderDefaults.colors(thumbColor = Color(0xFF00E5FF), activeTrackColor = Color(0xFF00E5FF))
+            colors = SliderDefaults.colors(thumbColor = Color(0xFFFF6A00), activeTrackColor = Color(0xFFFF6A00))
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = { onValueChange((valueMs - 50).coerceAtLeast(-2000)) }) { Text("−50 ms", color = Color.White) }
@@ -1201,7 +925,6 @@ private fun formatDelayMs(value: Int): String = if (value == 0) "0 ms" else if (
 
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
-    focusedIndex: Int,
     audioTracks: List<AudioTrack>,
     selectedAudioKey: String?,
     onSelectAudio: (AudioTrack?) -> Unit,
@@ -1212,11 +935,6 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
     onSelectSubtitle: (SubtitleTrack?) -> Unit,
     onClose: () -> Unit
 ) {
-    val listState = rememberLazyListState()
-    val audioMenuCount = 1 + audioTracks.size + 1 + 1 + subtitles.size + 1
-    LaunchedEffect(focusedIndex, audioMenuCount) {
-        listState.animateScrollToItem(focusedIndex.coerceAtLeast(0).coerceAtMost(audioMenuCount - 1))
-    }
     Card(
         Modifier
             .align(Alignment.TopEnd)
@@ -1226,29 +944,35 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
         Column(Modifier.width(300.dp)) {
             Text(
                 "Audio & Subtitles",
-                color = Color(0xFF8B5CF6),
+                color = Color(0xFFFFB000),
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.titleMedium
             )
 
-            LazyColumn(modifier = Modifier.heightIn(max = 430.dp), state = listState) {
+            LazyColumn(Modifier.heightIn(max = 430.dp)) {
                 item {
                     Text(
                         "Audio Track",
-                        color = Color(0xFF8B5CF6),
+                        color = Color(0xFFFFB000),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                     )
-                    DropdownMenuItem(
-                        modifier = tvMenuItemModifier(focusedIndex == 0),
-                        text = { Text(if (selectedAudioKey == null) "✓ Auto" else "Auto", color = Color.White) },
-                        onClick = { onSelectAudio(null) }
-                    )
+                    if (audioTracks.isEmpty()) {
+                        Text(
+                            "Default audio",
+                            color = Color.LightGray,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    } else {
+                        DropdownMenuItem(
+                            text = { Text(if (selectedAudioKey == null) "✓ Auto" else "Auto", color = Color.White) },
+                            onClick = { onSelectAudio(null) }
+                        )
+                    }
                 }
 
                 items(audioTracks) { track ->
                     DropdownMenuItem(
-                        modifier = tvMenuItemModifier(focusedIndex == audioTracks.indexOf(track) + 1),
                         text = {
                             Text(
                                 if (track.key == selectedAudioKey) "✓ ${track.label}" else track.label,
@@ -1262,7 +986,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
                 item {
                     Text(
                         "Subtitles",
-                        color = Color(0xFF8B5CF6),
+                        color = Color(0xFFFFB000),
                         style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                     )
@@ -1273,13 +997,12 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("Subtitles", color = Color.White, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }, modifier = tvMenuItemModifier(focusedIndex == audioTracks.size + 1)) {
-                            Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFF8B5CF6))
+                        TextButton(onClick = { onSubtitlesEnabled(!subtitlesEnabled) }) {
+                            Text(if (subtitlesEnabled) "ON" else "OFF", color = Color(0xFFFFB000))
                         }
                     }
 
                     DropdownMenuItem(
-                        modifier = tvMenuItemModifier(focusedIndex == audioTracks.size + 2),
                         text = { Text(if (selectedSubtitleKey == null) "✓ Off" else "Off", color = Color.White) },
                         onClick = { onSelectSubtitle(null) }
                     )
@@ -1287,7 +1010,6 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
 
                 items(subtitles) { track ->
                     DropdownMenuItem(
-                        modifier = tvMenuItemModifier(focusedIndex == audioTracks.size + 3 + subtitles.indexOf(track)),
                         text = {
                             Text(
                                 if (track.key == selectedSubtitleKey) "✓ ${track.label}" else track.label,
@@ -1301,7 +1023,7 @@ private fun androidx.compose.foundation.layout.BoxScope.AudioSubtitleMenu(
 
             TextButton(
                 onClick = onClose,
-                modifier = Modifier.fillMaxWidth().then(tvMenuItemModifier(focusedIndex == audioTracks.size + subtitles.size + 3))
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Close", color = Color.White)
             }

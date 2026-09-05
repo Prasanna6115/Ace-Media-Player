@@ -38,8 +38,7 @@ fun SongRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .tvFocusable()
-            .padding(horizontal = 28.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(
@@ -47,7 +46,7 @@ fun SongRow(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier
-                .size(72.dp)
+                .size(48.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         )

@@ -4,9 +4,7 @@ import android.Manifest
 import android.content.Intent
 import android.os.Build
 import android.content.pm.PackageManager
-import android.content.pm.ActivityInfo
 import android.os.Bundle
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
@@ -55,12 +53,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // Start the playback service up front so lock screen / notification controls
         // and background playback are available as soon as something is queued.
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         startService(Intent(this, PlaybackService::class.java))
 
         requestNeededPermissions()

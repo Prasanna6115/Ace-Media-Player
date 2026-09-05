@@ -29,8 +29,7 @@ fun VideoRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .tvFocusable()
-            .padding(horizontal = 28.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -39,7 +38,7 @@ fun VideoRow(
             durationMs = video.duration,
             seed = video.id,
             modifier = Modifier
-                .size(width = 220.dp, height = 124.dp)
+                .size(width = 112.dp, height = 68.dp)
                 .clip(RoundedCornerShape(8.dp))
         )
 
